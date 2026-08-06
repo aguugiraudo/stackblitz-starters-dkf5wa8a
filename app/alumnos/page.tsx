@@ -2,7 +2,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
-const MES_ACTUAL = '2026-08-01'
 const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
 const SOSPECHOSOS = [
@@ -20,7 +19,7 @@ export default function Alumnos() {
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState('activo')
   const [editando, setEditando] = useState(null)
-  const [viendo, setViendo] = useState(null) // alumno cuyo detalle se muestra
+  const [viendo, setViendo] = useState(null)
   const [inscripcionesDetalle, setInscripcionesDetalle] = useState([])
   const [fusionAbierta, setFusionAbierta] = useState(false)
   const [buscA, setBuscA] = useState('')
@@ -30,7 +29,8 @@ export default function Alumnos() {
   const [conteos, setConteos] = useState(null)
   const [survivor, setSurvivor] = useState(null)
   const [sospechososVigentes, setSospechososVigentes] = useState([])
-  const [logoOk, setLogoOk] = useState(true)
+  const [mesStats, setMesStats] = useState('2026-08-01')
+  const [anotadosEnMes, setAnotadosEnMes] = useState(null)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -48,6 +48,24 @@ export default function Alumnos() {
   }, [])
 
   useEffect(() => { cargar() }, [])
+
+  const cargarAnotadosEnMes = useCallback(async () => {
+    const { data } = await supabase
+      .from('inscripciones').select('alumno_id')
+      .eq('mes', mesStats).eq('estado', 'activo')
+    const distintos = new Set((data || []).map(d => d.alumno_id))
+    setAnotadosEnMes(distintos.size)
+  }, [mesStats])
+
+  useEffect(() => { cargarAnotadosEnMes() }, [cargarAnotadosEnMes])
+
+  function cambiarMesStats(delta) {
+    const [y, m] = mesStats.split('-').map(Number)
+    const fecha = new Date(y, m - 1 + delta, 1)
+    setMesStats(`${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-01`)
+  }
+  const [anioStats, mesNumStats] = mesStats.split('-').map(Number)
+  const labelMesStats = `${NOMBRES_MES[mesNumStats - 1]} ${anioStats}`
 
   const totalHistorico = alumnos.length
   const totalActivos = alumnos.filter(a => a.estado === 'activo').length
@@ -70,12 +88,11 @@ export default function Alumnos() {
 
   async function abrirDetalle(alumno) {
     setViendo(alumno)
-    const [anio, mesNum] = MES_ACTUAL.split('-').map(Number)
     const { data } = await supabase
       .from('inscripciones')
       .select('*, horarios_clase(dia, hora)')
       .eq('alumno_id', alumno.id)
-      .eq('mes', MES_ACTUAL)
+      .eq('mes', mesStats)
       .eq('estado', 'activo')
     setInscripcionesDetalle(data || [])
   }
@@ -119,34 +136,37 @@ export default function Alumnos() {
     cargar()
   }
 
-  const [anioMes, mesNumMes] = MES_ACTUAL.split('-').map(Number)
-  const labelMesActual = `${NOMBRES_MES[mesNumMes - 1]} ${anioMes}`
-
   return (
-    <div className="min-h-screen bg-[#ECE6DA] px-4 py-8 md:px-12 md:py-10">
-      <header className="mb-6">
-        {logoOk ? (
-          <img src="/logo.png" alt="Romana Pilates" onError={() => setLogoOk(false)} className="h-12 w-auto mb-2" />
-        ) : (
-          <p className="font-mono text-xs tracking-widest text-[#8A8378] uppercase mb-1">Romana Pilates</p>
-        )}
-        <h1 className="text-2xl md:text-4xl font-semibold text-[#221F1B]" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-          Alumnos
-        </h1>
-        <nav className="flex gap-4 mt-3">
+    <div className="min-h-screen bg-[#ECE6DA] px-4 py-6 md:px-12 md:py-8">
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+        <p className="text-lg text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
+          Romana Studio
+        </p>
+        <nav className="flex gap-4">
           <a href="/" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Días y Horarios</a>
           <a href="/alumnos" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Alumnos</a>
         </nav>
-      </header>
+      </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-6 max-w-md">
+      <p className="text-xs text-[#8A8378] uppercase tracking-widest mb-5">Alumnos</p>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6 max-w-xl">
         <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
           <p className="text-xs text-[#8A8378] mb-1">Alumnos históricos</p>
           <p className="text-2xl font-semibold text-[#221F1B]">{totalHistorico}</p>
         </div>
         <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
-          <p className="text-xs text-[#8A8378] mb-1">Alumnos activos</p>
+          <p className="text-xs text-[#8A8378] mb-1">Alumnos activos hoy</p>
           <p className="text-2xl font-semibold text-[#5C6F5D]">{totalActivos}</p>
+        </div>
+        <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3 col-span-2 sm:col-span-1">
+          <p className="text-xs text-[#8A8378] mb-1">Anotados en un mes</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => cambiarMesStats(-1)} className="w-5 h-5 rounded-full bg-[#ECE6DA] flex items-center justify-center text-[#221F1B] text-xs">‹</button>
+            <p className="text-2xl font-semibold text-[#221F1B] flex-1 text-center">{anotadosEnMes ?? '—'}</p>
+            <button onClick={() => cambiarMesStats(1)} className="w-5 h-5 rounded-full bg-[#ECE6DA] flex items-center justify-center text-[#221F1B] text-xs">›</button>
+          </div>
+          <p className="text-[10px] text-[#8A8378] text-center mt-1">{labelMesStats}</p>
         </div>
       </div>
 
@@ -232,7 +252,7 @@ export default function Alumnos() {
             <p className="text-xs text-[#8A8378] mb-4">
               {viendo.clases_semana} clases/semana · {viendo.estado === 'activo' ? 'Activo' : 'Baja'}
             </p>
-            <p className="text-xs font-medium text-[#8A8378] uppercase tracking-wide mb-2">Horarios en {labelMesActual}</p>
+            <p className="text-xs font-medium text-[#8A8378] uppercase tracking-wide mb-2">Horarios en {labelMesStats}</p>
             <div className="flex flex-col gap-1.5 mb-2">
               {inscripcionesDetalle.length > 0 ? inscripcionesDetalle.map(i => (
                 <div key={i.id} className="text-sm text-[#221F1B] bg-[#F5F1E9] rounded-lg px-3 py-2">

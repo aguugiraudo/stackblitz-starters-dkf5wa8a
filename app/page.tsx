@@ -31,7 +31,6 @@ export default function Grilla() {
   const [camasConsulta, setCamasConsulta] = useState(1)
   const [textoCopiado, setTextoCopiado] = useState(false)
   const [diaMovil, setDiaMovil] = useState(DIAS[0])
-  const [logoOk, setLogoOk] = useState(true)
   const canvasRef = useRef(null)
 
   const cargar = useCallback(async () => {
@@ -196,7 +195,7 @@ export default function Grilla() {
     ctx.font = '500 28px monospace'
     ctx.textAlign = 'center'
     ctx.letterSpacing = '6px'
-    ctx.fillText('ROMANA PILATES', W / 2, 180)
+    ctx.fillText('ROMANA STUDIO', W / 2, 180)
 
     ctx.fillStyle = '#221F1B'
     ctx.font = '700 88px sans-serif'
@@ -250,28 +249,20 @@ export default function Grilla() {
   const horariosDelDiaMovil = horasUnicas.filter(hora => getSlot(diaMovil, hora))
 
   return (
-    <div className="min-h-screen bg-[#ECE6DA] px-4 py-8 md:px-12 md:py-10">
-      <header className="mb-6">
-        {logoOk ? (
-          <img
-            src="/logo.png"
-            alt="Romana Pilates"
-            onError={() => setLogoOk(false)}
-            className="h-12 w-auto mb-2"
-          />
-        ) : (
-          <p className="font-mono text-xs tracking-widest text-[#8A8378] uppercase mb-1">Romana Pilates</p>
-        )}
-        <h1 className="text-2xl md:text-4xl font-semibold text-[#221F1B]" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-          Días y Horarios
-        </h1>
-        <nav className="flex gap-4 mt-3">
+    <div className="min-h-screen bg-[#ECE6DA] px-4 py-6 md:px-12 md:py-8">
+      {/* Barra superior: marca + navegación */}
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+        <p className="text-lg text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
+          Romana Studio
+        </p>
+        <nav className="flex gap-4">
           <a href="/" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Días y Horarios</a>
           <a href="/alumnos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Alumnos</a>
         </nav>
-      </header>
+      </div>
 
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+      {/* Barra de mes + acciones */}
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <button onClick={() => cambiarMes(-1)} className="w-8 h-8 rounded-full bg-white border border-[#221F1B]/10 flex items-center justify-center text-[#221F1B] hover:bg-[#F5F1E9]">‹</button>
           <span className="text-sm font-medium text-[#221F1B] min-w-[140px] text-center">{labelMes}</span>
@@ -286,6 +277,9 @@ export default function Grilla() {
           </button>
         </div>
       </div>
+
+      {/* Subtítulo de sección */}
+      <p className="text-xs text-[#8A8378] uppercase tracking-widest mb-5">Días y Horarios</p>
 
       {mesVacio && (
         <div className="mb-6">
@@ -304,9 +298,9 @@ export default function Grilla() {
             <table className="w-full border-collapse table-fixed">
               <thead>
                 <tr className="border-b border-[#221F1B]/10 bg-[#F3EEE4]">
-                  <th className="text-center px-3 py-2.5 font-mono text-xs tracking-wider text-[#8A8378] uppercase w-20">Hora</th>
+                  <th className="text-center px-3 py-3 font-mono text-sm font-bold tracking-wider text-[#8A8378] uppercase w-20">Hora</th>
                   {DIAS.map(d => (
-                    <th key={d} className="text-center px-3 py-2.5 text-sm font-semibold text-[#221F1B] tracking-wide">{d}</th>
+                    <th key={d} className="text-center px-3 py-3 text-base font-bold text-[#221F1B] tracking-wide">{d}</th>
                   ))}
                 </tr>
               </thead>
