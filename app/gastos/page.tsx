@@ -343,7 +343,7 @@ export default function Gastos() {
               ))}
             </div>
             <p className="text-[11px] text-[#8A8378] mb-3">
-              "Proyectado" = sabés que lo vas a pagar (ej. el alquiler antes de transferirlo) — no suma en la plata que ya salió, sí en la proyección del mes.
+            &quot;Proyectado&quot; = sabés que lo vas a pagar (ej. el alquiler antes de transferirlo) — no suma en la plata que ya salió, sí en la proyección del mes.
             </p>
 
             <label className="block text-xs text-[#8A8378] mb-1">Fecha</label>
