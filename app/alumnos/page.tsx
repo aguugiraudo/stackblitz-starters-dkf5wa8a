@@ -31,6 +31,7 @@ export default function Alumnos() {
   const [sospechososVigentes, setSospechososVigentes] = useState([])
   const [mesStats, setMesStats] = useState('2026-08-01')
   const [anotadosEnMes, setAnotadosEnMes] = useState(null)
+  const [clasesPorAlumno, setClasesPorAlumno] = useState({}) // { alumno_id: cantidad }
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -53,8 +54,10 @@ export default function Alumnos() {
     const { data } = await supabase
       .from('inscripciones').select('alumno_id')
       .eq('mes', mesStats).eq('estado', 'activo')
-    const distintos = new Set((data || []).map(d => d.alumno_id))
-    setAnotadosEnMes(distintos.size)
+    const conteos = {}
+    ;(data || []).forEach(d => { conteos[d.alumno_id] = (conteos[d.alumno_id] || 0) + 1 })
+    setClasesPorAlumno(conteos)
+    setAnotadosEnMes(Object.keys(conteos).length)
   }, [mesStats])
 
   useEffect(() => { cargarAnotadosEnMes() }, [cargarAnotadosEnMes])
@@ -79,7 +82,6 @@ export default function Alumnos() {
     if (!editando) return
     await supabase.from('alumnos').update({
       nombre: editando.nombre,
-      clases_semana: editando.clases_semana,
       estado: editando.estado
     }).eq('id', editando.id)
     setEditando(null)
@@ -144,6 +146,7 @@ export default function Alumnos() {
         </p>
         <nav className="flex gap-4">
           <a href="/" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Días y Horarios</a>
+          <a href="/cobranza" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cobranza</a>
           <a href="/alumnos" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Alumnos</a>
         </nav>
       </div>
@@ -213,7 +216,7 @@ export default function Alumnos() {
             <thead>
               <tr className="border-b border-[#221F1B]/10 bg-[#F3EEE4]">
                 <th className="text-left px-4 py-3 text-sm font-semibold text-[#221F1B]">Nombre</th>
-                <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B] w-32">Clases/sem</th>
+                <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B] w-40">Clases/sem ({labelMesStats})</th>
                 <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B] w-28">Estado</th>
                 <th className="w-16"></th>
               </tr>
@@ -226,7 +229,7 @@ export default function Alumnos() {
                       {a.nombre}
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-sm text-center text-[#221F1B]">{a.clases_semana}</td>
+                  <td className="px-4 py-3 text-sm text-center text-[#221F1B]">{clasesPorAlumno[a.id] ?? 0}</td>
                   <td className="px-4 py-3 text-center">
                     <span className={`text-xs px-2 py-1 rounded-full ${a.estado === 'activo' ? 'bg-[#5C6F5D] text-white' : 'bg-[#EDE7DD] text-[#8A8378]'}`}>
                       {a.estado === 'activo' ? 'Activo' : 'Baja'}
@@ -250,7 +253,7 @@ export default function Alumnos() {
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-medium text-[#221F1B] mb-1">{viendo.nombre}</p>
             <p className="text-xs text-[#8A8378] mb-4">
-              {viendo.clases_semana} clases/semana · {viendo.estado === 'activo' ? 'Activo' : 'Baja'}
+              {clasesPorAlumno[viendo.id] ?? 0} clases/semana en {labelMesStats} · {viendo.estado === 'activo' ? 'Activo' : 'Baja'}
             </p>
             <p className="text-xs font-medium text-[#8A8378] uppercase tracking-wide mb-2">Horarios en {labelMesStats}</p>
             <div className="flex flex-col gap-1.5 mb-2">
@@ -275,8 +278,9 @@ export default function Alumnos() {
             <p className="text-sm font-medium text-[#221F1B] mb-4">Editar alumno</p>
             <label className="block text-xs text-[#8A8378] mb-1">Nombre</label>
             <input value={editando.nombre} onChange={e => setEditando({ ...editando, nombre: e.target.value })} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
-            <label className="block text-xs text-[#8A8378] mb-1">Clases por semana</label>
-            <input type="number" min={1} max={7} value={editando.clases_semana} onChange={e => setEditando({ ...editando, clases_semana: parseInt(e.target.value) || 1 })} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
+            <p className="text-xs text-[#8A8378] mb-4">
+              Clases por semana: <span className="text-[#221F1B] font-medium">{clasesPorAlumno[editando.id] ?? 0}</span> (se calcula solo desde la grilla, no se edita acá)
+            </p>
             <label className="block text-xs text-[#8A8378] mb-1">Estado</label>
             <div className="flex gap-2 mb-5">
               {['activo', 'baja'].map(e => (
