@@ -2,6 +2,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
+const MES_ACTUAL = '2026-08-01'
+const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
 const SOSPECHOSOS = [
   ['DARIO K', 'DARIO KARCHESKY'],
   ['JOSEFINA BAGNERA15%', 'JOSEFINA BAGNERA'],
@@ -15,16 +18,19 @@ export default function Alumnos() {
   const [alumnos, setAlumnos] = useState([])
   const [cargando, setCargando] = useState(true)
   const [busqueda, setBusqueda] = useState('')
-  const [filtro, setFiltro] = useState('activo') // activo | baja | todos
-  const [editando, setEditando] = useState(null) // alumno seleccionado
+  const [filtro, setFiltro] = useState('activo')
+  const [editando, setEditando] = useState(null)
+  const [viendo, setViendo] = useState(null) // alumno cuyo detalle se muestra
+  const [inscripcionesDetalle, setInscripcionesDetalle] = useState([])
   const [fusionAbierta, setFusionAbierta] = useState(false)
   const [buscA, setBuscA] = useState('')
   const [buscB, setBuscB] = useState('')
   const [seleccionA, setSeleccionA] = useState(null)
   const [seleccionB, setSeleccionB] = useState(null)
-  const [conteos, setConteos] = useState(null) // { a: {insc, cob}, b: {...} }
-  const [survivor, setSurvivor] = useState(null) // 'a' | 'b'
+  const [conteos, setConteos] = useState(null)
+  const [survivor, setSurvivor] = useState(null)
   const [sospechososVigentes, setSospechososVigentes] = useState([])
+  const [logoOk, setLogoOk] = useState(true)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -43,6 +49,9 @@ export default function Alumnos() {
 
   useEffect(() => { cargar() }, [])
 
+  const totalHistorico = alumnos.length
+  const totalActivos = alumnos.filter(a => a.estado === 'activo').length
+
   const filtrados = alumnos.filter(a => {
     if (filtro !== 'todos' && a.estado !== filtro) return false
     return a.nombre.toLowerCase().includes(busqueda.toLowerCase())
@@ -57,6 +66,18 @@ export default function Alumnos() {
     }).eq('id', editando.id)
     setEditando(null)
     cargar()
+  }
+
+  async function abrirDetalle(alumno) {
+    setViendo(alumno)
+    const [anio, mesNum] = MES_ACTUAL.split('-').map(Number)
+    const { data } = await supabase
+      .from('inscripciones')
+      .select('*, horarios_clase(dia, hora)')
+      .eq('alumno_id', alumno.id)
+      .eq('mes', MES_ACTUAL)
+      .eq('estado', 'activo')
+    setInscripcionesDetalle(data || [])
   }
 
   function abrirFusionCon(nombreA, nombreB) {
@@ -98,30 +119,45 @@ export default function Alumnos() {
     cargar()
   }
 
+  const [anioMes, mesNumMes] = MES_ACTUAL.split('-').map(Number)
+  const labelMesActual = `${NOMBRES_MES[mesNumMes - 1]} ${anioMes}`
+
   return (
-    <div className="min-h-screen bg-[#F2F3EF] px-6 py-10 md:px-12">
+    <div className="min-h-screen bg-[#ECE6DA] px-4 py-8 md:px-12 md:py-10">
       <header className="mb-6">
-        <p className="font-mono text-xs tracking-widest text-[#8B8B82] uppercase mb-1">Romana Pilates</p>
-        <h1 className="text-3xl md:text-4xl font-semibold text-[#2B2B28]" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+        {logoOk ? (
+          <img src="/logo.png" alt="Romana Pilates" onError={() => setLogoOk(false)} className="h-12 w-auto mb-2" />
+        ) : (
+          <p className="font-mono text-xs tracking-widest text-[#8A8378] uppercase mb-1">Romana Pilates</p>
+        )}
+        <h1 className="text-2xl md:text-4xl font-semibold text-[#221F1B]" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
           Alumnos
         </h1>
         <nav className="flex gap-4 mt-3">
-          <a href="/" className="text-sm font-medium text-[#8B8B82] hover:text-[#2B2B28]">Días y Horarios</a>
+          <a href="/" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Días y Horarios</a>
           <a href="/alumnos" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Alumnos</a>
         </nav>
       </header>
 
+      <div className="grid grid-cols-2 gap-3 mb-6 max-w-md">
+        <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
+          <p className="text-xs text-[#8A8378] mb-1">Alumnos históricos</p>
+          <p className="text-2xl font-semibold text-[#221F1B]">{totalHistorico}</p>
+        </div>
+        <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
+          <p className="text-xs text-[#8A8378] mb-1">Alumnos activos</p>
+          <p className="text-2xl font-semibold text-[#5C6F5D]">{totalActivos}</p>
+        </div>
+      </div>
+
       {sospechososVigentes.length > 0 && (
-        <div className="mb-6 bg-white rounded-xl border border-black/5 p-4">
-          <p className="text-sm font-medium text-[#2B2B28] mb-2">Posibles duplicados detectados</p>
+        <div className="mb-6 bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 p-4">
+          <p className="text-sm font-medium text-[#221F1B] mb-2">Posibles duplicados detectados</p>
           <div className="flex flex-col gap-2">
             {sospechososVigentes.map(([n1, n2]) => (
               <div key={n1 + n2} className="flex items-center justify-between text-sm">
-                <span className="text-[#2B2B28]">{n1} <span className="text-[#8B8B82]">↔</span> {n2}</span>
-                <button
-                  onClick={() => abrirFusionCon(n1, n2)}
-                  className="text-xs px-3 py-1 rounded-full bg-[#F2F3EF] text-[#5C6F5D] font-medium hover:bg-[#E7E9E3]"
-                >
+                <span className="text-[#221F1B]">{n1} <span className="text-[#8A8378]">↔</span> {n2}</span>
+                <button onClick={() => abrirFusionCon(n1, n2)} className="text-xs px-3 py-1 rounded-full bg-[#F5F1E9] text-[#5C6F5D] font-medium hover:bg-[#EDE7DD]">
                   Revisar
                 </button>
               </div>
@@ -133,25 +169,16 @@ export default function Alumnos() {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div className="flex gap-2">
           {['activo', 'baja', 'todos'].map(f => (
-            <button
-              key={f}
-              onClick={() => setFiltro(f)}
-              className={`px-4 py-1.5 rounded-full text-sm border ${filtro === f ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#2B2B28] border-black/10 hover:border-[#5C6F5D]'}`}
-            >
+            <button key={f} onClick={() => setFiltro(f)} className={`px-4 py-1.5 rounded-full text-sm border ${filtro === f ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15 hover:border-[#5C6F5D]'}`}>
               {f === 'activo' ? 'Activos' : f === 'baja' ? 'Ex alumnos' : 'Todos'}
             </button>
           ))}
         </div>
         <div className="flex gap-2">
-          <input
-            value={busqueda}
-            onChange={e => setBusqueda(e.target.value)}
-            placeholder="Buscar alumno…"
-            className="border border-[#E3E3DE] rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#5C6F5D] bg-white"
-          />
+          <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar alumno…" className="border border-[#221F1B]/15 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#5C6F5D] bg-white" />
           <button
             onClick={() => { setFusionAbierta(true); setBuscA(''); setBuscB(''); setSeleccionA(null); setSeleccionB(null); setConteos(null); setSurvivor(null) }}
-            className="text-sm px-4 py-1.5 rounded-full bg-white border border-black/10 text-[#2B2B28] hover:border-[#5C6F5D] hover:text-[#5C6F5D]"
+            className="text-sm px-4 py-1.5 rounded-full bg-white border border-[#221F1B]/15 text-[#221F1B] hover:border-[#5C6F5D] hover:text-[#5C6F5D]"
           >
             Fusionar alumnos
           </button>
@@ -159,25 +186,29 @@ export default function Alumnos() {
       </div>
 
       {cargando ? (
-        <p className="text-[#8B8B82] text-sm">Cargando alumnos…</p>
+        <p className="text-[#8A8378] text-sm">Cargando alumnos…</p>
       ) : (
-        <div className="bg-white rounded-2xl border border-black/5 overflow-hidden">
+        <div className="bg-[#FBF9F5] rounded-2xl border border-[#221F1B]/8 overflow-hidden">
           <table className="w-full border-collapse">
             <thead>
-              <tr className="border-b border-black/5 bg-[#FAFAF8]">
-                <th className="text-left px-4 py-3 text-sm font-semibold text-[#2B2B28]">Nombre</th>
-                <th className="text-center px-4 py-3 text-sm font-semibold text-[#2B2B28] w-32">Clases/sem</th>
-                <th className="text-center px-4 py-3 text-sm font-semibold text-[#2B2B28] w-28">Estado</th>
+              <tr className="border-b border-[#221F1B]/10 bg-[#F3EEE4]">
+                <th className="text-left px-4 py-3 text-sm font-semibold text-[#221F1B]">Nombre</th>
+                <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B] w-32">Clases/sem</th>
+                <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B] w-28">Estado</th>
                 <th className="w-16"></th>
               </tr>
             </thead>
             <tbody>
               {filtrados.map(a => (
-                <tr key={a.id} className="border-b border-black/5 last:border-0 hover:bg-[#FAFAF8]">
-                  <td className="px-4 py-3 text-sm text-[#2B2B28]">{a.nombre}</td>
-                  <td className="px-4 py-3 text-sm text-center text-[#2B2B28]">{a.clases_semana}</td>
+                <tr key={a.id} className="border-b border-[#221F1B]/8 last:border-0 hover:bg-[#F5F1E9]">
+                  <td className="px-4 py-3 text-sm">
+                    <button onClick={() => abrirDetalle(a)} className="text-[#221F1B] hover:text-[#5C6F5D] hover:underline text-left">
+                      {a.nombre}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-center text-[#221F1B]">{a.clases_semana}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`text-xs px-2 py-1 rounded-full ${a.estado === 'activo' ? 'bg-[#5C6F5D] text-white' : 'bg-[#E3E3DE] text-[#8B8B82]'}`}>
+                    <span className={`text-xs px-2 py-1 rounded-full ${a.estado === 'activo' ? 'bg-[#5C6F5D] text-white' : 'bg-[#EDE7DD] text-[#8A8378]'}`}>
                       {a.estado === 'activo' ? 'Activo' : 'Baja'}
                     </span>
                   </td>
@@ -187,44 +218,55 @@ export default function Alumnos() {
                 </tr>
               ))}
               {filtrados.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-6 text-center text-sm text-[#8B8B82]">Sin resultados</td></tr>
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-sm text-[#8A8378]">Sin resultados</td></tr>
               )}
             </tbody>
           </table>
         </div>
       )}
 
+      {viendo && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4" onClick={() => setViendo(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-[#221F1B] mb-1">{viendo.nombre}</p>
+            <p className="text-xs text-[#8A8378] mb-4">
+              {viendo.clases_semana} clases/semana · {viendo.estado === 'activo' ? 'Activo' : 'Baja'}
+            </p>
+            <p className="text-xs font-medium text-[#8A8378] uppercase tracking-wide mb-2">Horarios en {labelMesActual}</p>
+            <div className="flex flex-col gap-1.5 mb-2">
+              {inscripcionesDetalle.length > 0 ? inscripcionesDetalle.map(i => (
+                <div key={i.id} className="text-sm text-[#221F1B] bg-[#F5F1E9] rounded-lg px-3 py-2">
+                  {i.horarios_clase?.dia} — {i.horarios_clase?.hora?.slice(0, 5)}
+                </div>
+              )) : (
+                <p className="text-sm text-[#8A8378]">Sin horarios anotados este mes</p>
+              )}
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setViendo(null)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editando && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4" onClick={() => setEditando(null)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-medium text-[#2B2B28] mb-4">Editar alumno</p>
-            <label className="block text-xs text-[#8B8B82] mb-1">Nombre</label>
-            <input
-              value={editando.nombre}
-              onChange={e => setEditando({ ...editando, nombre: e.target.value })}
-              className="w-full border border-[#E3E3DE] rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]"
-            />
-            <label className="block text-xs text-[#8B8B82] mb-1">Clases por semana</label>
-            <input
-              type="number" min={1} max={7}
-              value={editando.clases_semana}
-              onChange={e => setEditando({ ...editando, clases_semana: parseInt(e.target.value) || 1 })}
-              className="w-full border border-[#E3E3DE] rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]"
-            />
-            <label className="block text-xs text-[#8B8B82] mb-1">Estado</label>
+            <p className="text-sm font-medium text-[#221F1B] mb-4">Editar alumno</p>
+            <label className="block text-xs text-[#8A8378] mb-1">Nombre</label>
+            <input value={editando.nombre} onChange={e => setEditando({ ...editando, nombre: e.target.value })} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
+            <label className="block text-xs text-[#8A8378] mb-1">Clases por semana</label>
+            <input type="number" min={1} max={7} value={editando.clases_semana} onChange={e => setEditando({ ...editando, clases_semana: parseInt(e.target.value) || 1 })} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
+            <label className="block text-xs text-[#8A8378] mb-1">Estado</label>
             <div className="flex gap-2 mb-5">
               {['activo', 'baja'].map(e => (
-                <button
-                  key={e}
-                  onClick={() => setEditando({ ...editando, estado: e })}
-                  className={`px-4 py-1.5 rounded-full text-sm border ${editando.estado === e ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#2B2B28] border-black/10'}`}
-                >
+                <button key={e} onClick={() => setEditando({ ...editando, estado: e })} className={`px-4 py-1.5 rounded-full text-sm border ${editando.estado === e ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
                   {e === 'activo' ? 'Activo' : 'Baja'}
                 </button>
               ))}
             </div>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setEditando(null)} className="px-4 py-2 rounded-full text-sm font-medium text-[#2B2B28] border border-black/10 hover:bg-[#F2F3EF]">Cancelar</button>
+              <button onClick={() => setEditando(null)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cancelar</button>
               <button onClick={guardarEdicion} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5C6F5D] hover:bg-[#4C5C4D]">Guardar</button>
             </div>
           </div>
@@ -234,73 +276,52 @@ export default function Alumnos() {
       {fusionAbierta && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4" onClick={() => setFusionAbierta(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-medium text-[#2B2B28] mb-1">Fusionar alumnos duplicados</p>
-            <p className="text-xs text-[#8B8B82] mb-4">Elegí los dos registros que son la misma persona</p>
-
+            <p className="text-sm font-medium text-[#221F1B] mb-1">Fusionar alumnos duplicados</p>
+            <p className="text-xs text-[#8A8378] mb-4">Elegí los dos registros que son la misma persona</p>
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div>
-                <input
-                  value={buscA}
-                  onChange={e => { setBuscA(e.target.value); setSeleccionA(null); setConteos(null) }}
-                  placeholder="Buscar alumno A…"
-                  className="w-full border border-[#E3E3DE] rounded-lg px-3 py-2 text-sm mb-2 outline-none focus:border-[#5C6F5D]"
-                />
+                <input value={buscA} onChange={e => { setBuscA(e.target.value); setSeleccionA(null); setConteos(null) }} placeholder="Buscar alumno A…" className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-2 outline-none focus:border-[#5C6F5D]" />
                 {!seleccionA && buscA && (
                   <div className="max-h-32 overflow-y-auto flex flex-col gap-1">
                     {alumnos.filter(a => a.nombre.toLowerCase().includes(buscA.toLowerCase())).slice(0, 10).map(a => (
-                      <button key={a.id} onClick={() => setSeleccionA(a)} className="text-left text-xs px-2 py-1.5 rounded hover:bg-[#F2F3EF]">{a.nombre}</button>
+                      <button key={a.id} onClick={() => setSeleccionA(a)} className="text-left text-xs px-2 py-1.5 rounded hover:bg-[#F5F1E9]">{a.nombre}</button>
                     ))}
                   </div>
                 )}
-                {seleccionA && <p className="text-sm font-medium text-[#2B2B28]">{seleccionA.nombre}</p>}
+                {seleccionA && <p className="text-sm font-medium text-[#221F1B]">{seleccionA.nombre}</p>}
               </div>
               <div>
-                <input
-                  value={buscB}
-                  onChange={e => { setBuscB(e.target.value); setSeleccionB(null); setConteos(null) }}
-                  placeholder="Buscar alumno B…"
-                  className="w-full border border-[#E3E3DE] rounded-lg px-3 py-2 text-sm mb-2 outline-none focus:border-[#5C6F5D]"
-                />
+                <input value={buscB} onChange={e => { setBuscB(e.target.value); setSeleccionB(null); setConteos(null) }} placeholder="Buscar alumno B…" className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-2 outline-none focus:border-[#5C6F5D]" />
                 {!seleccionB && buscB && (
                   <div className="max-h-32 overflow-y-auto flex flex-col gap-1">
                     {alumnos.filter(a => a.nombre.toLowerCase().includes(buscB.toLowerCase())).slice(0, 10).map(a => (
-                      <button key={a.id} onClick={() => setSeleccionB(a)} className="text-left text-xs px-2 py-1.5 rounded hover:bg-[#F2F3EF]">{a.nombre}</button>
+                      <button key={a.id} onClick={() => setSeleccionB(a)} className="text-left text-xs px-2 py-1.5 rounded hover:bg-[#F5F1E9]">{a.nombre}</button>
                     ))}
                   </div>
                 )}
-                {seleccionB && <p className="text-sm font-medium text-[#2B2B28]">{seleccionB.nombre}</p>}
+                {seleccionB && <p className="text-sm font-medium text-[#221F1B]">{seleccionB.nombre}</p>}
               </div>
             </div>
 
             {seleccionA && seleccionB && conteos && (
-              <div className="bg-[#F2F3EF] rounded-lg p-4 mb-4">
-                <p className="text-xs text-[#8B8B82] mb-3">Elegí cuál registro querés conservar (el otro se elimina y sus datos pasan al que elijas)</p>
+              <div className="bg-[#F5F1E9] rounded-lg p-4 mb-4">
+                <p className="text-xs text-[#8A8378] mb-3">Elegí cuál registro querés conservar (el otro se elimina y sus datos pasan al que elijas)</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setSurvivor('a')}
-                    className={`text-left p-3 rounded-lg border ${survivor === 'a' ? 'border-[#5C6F5D] bg-white' : 'border-black/10 bg-white/50'}`}
-                  >
-                    <p className="text-sm font-medium text-[#2B2B28]">{seleccionA.nombre}</p>
-                    <p className="text-xs text-[#8B8B82] mt-1">{conteos.a.insc} inscripciones · {conteos.a.cob} cobranzas</p>
+                  <button onClick={() => setSurvivor('a')} className={`text-left p-3 rounded-lg border ${survivor === 'a' ? 'border-[#5C6F5D] bg-white' : 'border-[#221F1B]/10 bg-white/50'}`}>
+                    <p className="text-sm font-medium text-[#221F1B]">{seleccionA.nombre}</p>
+                    <p className="text-xs text-[#8A8378] mt-1">{conteos.a.insc} inscripciones · {conteos.a.cob} cobranzas</p>
                   </button>
-                  <button
-                    onClick={() => setSurvivor('b')}
-                    className={`text-left p-3 rounded-lg border ${survivor === 'b' ? 'border-[#5C6F5D] bg-white' : 'border-black/10 bg-white/50'}`}
-                  >
-                    <p className="text-sm font-medium text-[#2B2B28]">{seleccionB.nombre}</p>
-                    <p className="text-xs text-[#8B8B82] mt-1">{conteos.b.insc} inscripciones · {conteos.b.cob} cobranzas</p>
+                  <button onClick={() => setSurvivor('b')} className={`text-left p-3 rounded-lg border ${survivor === 'b' ? 'border-[#5C6F5D] bg-white' : 'border-[#221F1B]/10 bg-white/50'}`}>
+                    <p className="text-sm font-medium text-[#221F1B]">{seleccionB.nombre}</p>
+                    <p className="text-xs text-[#8A8378] mt-1">{conteos.b.insc} inscripciones · {conteos.b.cob} cobranzas</p>
                   </button>
                 </div>
               </div>
             )}
 
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setFusionAbierta(false)} className="px-4 py-2 rounded-full text-sm font-medium text-[#2B2B28] border border-black/10 hover:bg-[#F2F3EF]">Cancelar</button>
-              <button
-                onClick={confirmarFusion}
-                disabled={!survivor}
-                className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5C6F5D] hover:bg-[#4C5C4D] disabled:opacity-40"
-              >
+              <button onClick={() => setFusionAbierta(false)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cancelar</button>
+              <button onClick={confirmarFusion} disabled={!survivor} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5C6F5D] hover:bg-[#4C5C4D] disabled:opacity-40">
                 Confirmar fusión
               </button>
             </div>
