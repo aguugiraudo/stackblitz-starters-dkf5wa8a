@@ -413,7 +413,7 @@ export default function Grilla() {
               ))}
               {busqueda.trim() && !hayCoincidenciaExacta && (
                 <button onClick={() => crearYAsignar(modal.slotId, busqueda)} className="text-left text-sm px-3 py-2 rounded-lg bg-[#F5F1E9] text-[#5C6F5D] font-medium mt-1">
-                  + Crear alumno nuevo: "{busqueda.trim()}"
+                  + Crear alumno nuevo: &quot;{busqueda.trim()}&quot;
                 </button>
               )}
               {alumnosFiltrados.length === 0 && !busqueda.trim() && (
