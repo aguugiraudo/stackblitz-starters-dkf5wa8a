@@ -250,9 +250,8 @@ export default function Grilla() {
 
   return (
     <div className="min-h-screen bg-[#ECE6DA] px-4 py-6 md:px-12 md:py-8">
-      {/* Barra superior: marca + navegación */}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
-        <p className="text-lg text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
+        <p className="text-3xl md:text-4xl text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
           Romana Studio
         </p>
         <nav className="flex gap-4">
@@ -262,7 +261,6 @@ export default function Grilla() {
         </nav>
       </div>
 
-      {/* Barra de mes + acciones */}
       <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <button onClick={() => cambiarMes(-1)} className="w-8 h-8 rounded-full bg-white border border-[#221F1B]/10 flex items-center justify-center text-[#221F1B] hover:bg-[#F5F1E9]">‹</button>
@@ -279,7 +277,6 @@ export default function Grilla() {
         </div>
       </div>
 
-      {/* Subtítulo de sección */}
       <p className="text-xs text-[#8A8378] uppercase tracking-widest mb-5">Días y Horarios</p>
 
       {mesVacio && (
@@ -294,7 +291,6 @@ export default function Grilla() {
         <p className="text-[#8A8378] text-sm">Cargando agenda…</p>
       ) : (
         <>
-          {/* ---- Vista DESKTOP (tabla completa) ---- */}
           <div className="hidden md:block overflow-x-auto rounded-2xl bg-[#FBF9F5] shadow-sm border border-[#221F1B]/8">
             <table className="w-full border-collapse table-fixed">
               <thead>
@@ -353,7 +349,6 @@ export default function Grilla() {
             </table>
           </div>
 
-          {/* ---- Vista MOBILE (pestañas de día + lista) ---- */}
           <div className="md:hidden">
             <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
               {DIAS.map(d => (
