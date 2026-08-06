@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from './lib/supabase'
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
@@ -26,10 +26,12 @@ export default function Grilla() {
   const [busqueda, setBusqueda] = useState('')
   const [copiando, setCopiando] = useState(false)
   const [confirmarBaja, setConfirmarBaja] = useState(null)
-  const [confirmarMover, setConfirmarMover] = useState(null) // { inscripcionId, nombre, origenDia, origenHora, destinoDia, destinoHora, destinoSlotId }
+  const [confirmarMover, setConfirmarMover] = useState(null)
   const [dispAbierta, setDispAbierta] = useState(false)
+  const [placaAbierta, setPlacaAbierta] = useState(false)
   const [camasConsulta, setCamasConsulta] = useState(1)
   const [textoCopiado, setTextoCopiado] = useState(false)
+  const canvasRef = useRef(null)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -111,7 +113,7 @@ export default function Grilla() {
     if (!inscripcionId) return
     const insc = inscripciones.find(i => i.id === inscripcionId)
     if (!insc) return
-    if (insc.horario_clase_id === destinoSlot.id) return // soltó en el mismo lugar
+    if (insc.horario_clase_id === destinoSlot.id) return
 
     const yaHay = inscriptosDe(destinoSlot.id).length
     if (yaHay >= destinoSlot.cupos) { alert('Ese horario ya está completo'); return }
@@ -167,6 +169,83 @@ export default function Grilla() {
     }
   }
 
+  const bloquesPlaca = DIAS.map(dia => {
+    const horasLibres = horasUnicas
+      .filter(hora => {
+        const slot = getSlot(dia, hora)
+        if (!slot) return false
+        return slot.cupos - inscriptosDe(slot.id).length >= 1
+      })
+      .map(formatHoraCorta)
+    return { dia, horasLibres }
+  }).filter(b => b.horasLibres.length > 0)
+
+  useEffect(() => {
+    if (!placaAbierta) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    const W = 1080, H = 1920
+    canvas.width = W; canvas.height = H
+
+    ctx.fillStyle = '#F2F3EF'
+    ctx.fillRect(0, 0, W, H)
+
+    ctx.fillStyle = '#8B8B82'
+    ctx.font = '500 28px monospace'
+    ctx.textAlign = 'center'
+    ctx.letterSpacing = '6px'
+    ctx.fillText('ROMANA PILATES', W / 2, 180)
+
+    ctx.fillStyle = '#2B2B28'
+    ctx.font = '700 88px sans-serif'
+    ctx.letterSpacing = '0px'
+    ctx.fillText('ÚLTIMOS CUPOS', W / 2, 300)
+
+    ctx.fillStyle = '#5C6F5D'
+    ctx.font = '600 56px sans-serif'
+    ctx.fillText(labelMes.toUpperCase(), W / 2, 380)
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.08)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(140, 460)
+    ctx.lineTo(W - 140, 460)
+    ctx.stroke()
+
+    let y = 580
+    const lineHeight = 90
+    if (bloquesPlaca.length === 0) {
+      ctx.fillStyle = '#8B8B82'
+      ctx.font = '500 40px sans-serif'
+      ctx.fillText('Sin cupos disponibles por el momento', W / 2, y)
+    } else {
+      bloquesPlaca.forEach(b => {
+        ctx.fillStyle = '#2B2B28'
+        ctx.font = '700 48px sans-serif'
+        ctx.fillText(b.dia, W / 2, y)
+        y += 62
+        ctx.fillStyle = '#5C6F5D'
+        ctx.font = '500 42px monospace'
+        ctx.fillText(b.horasLibres.join('   /   '), W / 2, y)
+        y += lineHeight
+      })
+    }
+
+    ctx.fillStyle = '#8B8B82'
+    ctx.font = '400 32px sans-serif'
+    ctx.fillText('Consultá por WhatsApp', W / 2, H - 140)
+  }, [placaAbierta, bloquesPlaca, labelMes])
+
+  function descargarPlaca() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const link = document.createElement('a')
+    link.download = `cupos-${labelMes.toLowerCase().replace(' ', '-')}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+  }
+
   return (
     <div className="min-h-screen bg-[#F2F3EF] px-6 py-10 md:px-12">
       <header className="mb-6">
@@ -174,6 +253,10 @@ export default function Grilla() {
         <h1 className="text-3xl md:text-4xl font-semibold text-[#2B2B28]" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
           Días y Horarios
         </h1>
+        <nav className="flex gap-4 mt-3">
+          <a href="/" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Días y Horarios</a>
+          <a href="/alumnos" className="text-sm font-medium text-[#8B8B82] hover:text-[#2B2B28]">Alumnos</a>
+        </nav>
       </header>
 
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -182,9 +265,14 @@ export default function Grilla() {
           <span className="text-sm font-medium text-[#2B2B28] min-w-[140px] text-center">{labelMes}</span>
           <button onClick={() => cambiarMes(1)} className="w-8 h-8 rounded-full bg-white border border-black/5 flex items-center justify-center text-[#2B2B28] hover:bg-[#F2F3EF]">›</button>
         </div>
-        <button onClick={() => setDispAbierta(true)} className="text-sm px-4 py-2 rounded-full bg-white border border-black/10 text-[#2B2B28] hover:border-[#5C6F5D] hover:text-[#5C6F5D] flex items-center gap-2">
-          <span>🕧</span> Disponibilidad
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setDispAbierta(true)} className="text-sm px-4 py-2 rounded-full bg-white border border-black/10 text-[#2B2B28] hover:border-[#5C6F5D] hover:text-[#5C6F5D] flex items-center gap-2">
+            <span>🕧</span> Disponibilidad
+          </button>
+          <button onClick={() => setPlacaAbierta(true)} className="text-sm px-4 py-2 rounded-full bg-white border border-black/10 text-[#2B2B28] hover:border-[#5C6F5D] hover:text-[#5C6F5D] flex items-center gap-2">
+            <span>📷</span> Placa Instagram
+          </button>
+        </div>
       </div>
 
       {mesVacio && (
@@ -202,37 +290,39 @@ export default function Grilla() {
           <table className="w-full border-collapse table-fixed">
             <thead>
               <tr className="border-b border-black/5 bg-[#FAFAF8]">
-                <th className="text-center px-3 py-3 font-mono text-xs tracking-wider text-[#8B8B82] uppercase w-20">Hora</th>
+                <th className="text-center px-2 py-2 font-mono text-xs tracking-wider text-[#8B8B82] uppercase w-16">Hora</th>
                 {DIAS.map(d => (
-                  <th key={d} className="text-center px-3 py-3 text-sm font-semibold text-[#2B2B28] tracking-wide">{d}</th>
+                  <th key={d} className="text-center px-2 py-2 text-sm font-semibold text-[#2B2B28] tracking-wide">{d}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {horasUnicas.map(hora => (
                 <tr key={hora} className="border-b border-black/5 last:border-0">
-                  <td className="px-3 py-3 font-mono text-sm text-[#2B2B28] text-center align-top">{hora?.slice(0, 5)}</td>
+                  <td className="px-2 py-1.5 text-center align-top">
+                    <span className="font-mono text-xl font-bold text-[#2B2B28]">{formatHoraCorta(hora)}</span>
+                  </td>
                   {DIAS.map(dia => {
                     const slot = getSlot(dia, hora)
-                    if (!slot) return <td key={dia} className="px-3 py-3" />
+                    if (!slot) return <td key={dia} className="px-2 py-1.5" />
                     const inscriptos = inscriptosDe(slot.id)
                     const libres = slot.cupos - inscriptos.length
                     return (
-                      <td key={dia} className="px-3 py-3 align-top" onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e, slot, dia, hora)}>
-                        <div className="flex flex-col gap-1.5 items-center">
+                      <td key={dia} className="px-2 py-1.5 align-top" onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e, slot, dia, hora)}>
+                        <div className="flex flex-col gap-1 items-center">
                           {inscriptos.map(i => (
                             <div key={i.id} className="group relative w-full">
                               <span
                                 draggable
                                 onDragStart={e => onDragStartCapsula(e, i)}
-                                className="cursor-grab active:cursor-grabbing block text-center rounded-full bg-[#5C6F5D] text-white text-xs px-3 py-1 truncate"
+                                className="cursor-grab active:cursor-grabbing block text-center rounded-full bg-[#5C6F5D] text-white text-[11px] leading-tight px-2 py-0.5 truncate"
                                 title={i.alumnos?.nombre}
                               >
                                 {i.alumnos?.nombre}
                               </span>
                               <button
                                 onClick={() => setConfirmarBaja({ id: i.id, nombre: i.alumnos?.nombre })}
-                                className="hidden group-hover:flex absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#B5504A] text-white text-[10px] items-center justify-center"
+                                className="hidden group-hover:flex absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-[#B5504A] text-white text-[9px] items-center justify-center"
                                 title="Quitar"
                               >
                                 ×
@@ -240,7 +330,7 @@ export default function Grilla() {
                             </div>
                           ))}
                           {Array.from({ length: libres > 0 ? libres : 0 }).map((_, idx) => (
-                            <button key={idx} onClick={() => setModal({ slotId: slot.id })} className="w-full text-center rounded-full border border-dashed border-[#C9CCC5] text-[#B7B9B1] text-xs px-3 py-1 hover:border-[#5C6F5D] hover:text-[#5C6F5D] transition-colors">
+                            <button key={idx} onClick={() => setModal({ slotId: slot.id })} className="w-full text-center rounded-full border border-dashed border-[#C9CCC5] text-[#B7B9B1] text-[11px] leading-tight px-2 py-0.5 hover:border-[#5C6F5D] hover:text-[#5C6F5D] transition-colors">
                               + Libre
                             </button>
                           ))}
@@ -328,6 +418,23 @@ export default function Grilla() {
               <button onClick={() => setDispAbierta(false)} className="px-4 py-2 rounded-full text-sm font-medium text-[#2B2B28] border border-black/10 hover:bg-[#F2F3EF]">Cerrar</button>
               <button onClick={copiarMensaje} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5C6F5D] hover:bg-[#4C5C4D]">
                 {textoCopiado ? '✓ Copiado' : 'Copiar mensaje'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {placaAbierta && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4 py-8" onClick={() => setPlacaAbierta(false)}>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-[#2B2B28] mb-3">Placa para Instagram — {labelMes}</p>
+            <div className="rounded-xl overflow-hidden border border-black/5 mb-4">
+              <canvas ref={canvasRef} className="w-full h-auto block" />
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPlacaAbierta(false)} className="px-4 py-2 rounded-full text-sm font-medium text-[#2B2B28] border border-black/10 hover:bg-[#F2F3EF]">Cerrar</button>
+              <button onClick={descargarPlaca} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5C6F5D] hover:bg-[#4C5C4D]">
+                Descargar imagen
               </button>
             </div>
           </div>
