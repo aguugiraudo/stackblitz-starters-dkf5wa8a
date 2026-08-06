@@ -12,12 +12,13 @@ function hoyISO() {
 export default function Cobranza() {
   const [mes, setMes] = useState('2026-08-01')
   const [cargando, setCargando] = useState(true)
-  const [alumnosDelMes, setAlumnosDelMes] = useState([]) // [{id, nombre, clasesReales, exento_pago}]
+  const [alumnosDelMes, setAlumnosDelMes] = useState([])
   const [cobranzas, setCobranzas] = useState([])
   const [cuotasValores, setCuotasValores] = useState({})
   const [cuentas, setCuentas] = useState([])
   const [pagoModal, setPagoModal] = useState(null)
   const [montoForm, setMontoForm] = useState('')
+  const [montoEsperadoForm, setMontoEsperadoForm] = useState('')
   const [formaForm, setFormaForm] = useState('Efectivo')
   const [cuentaForm, setCuentaForm] = useState(null)
   const [diaPagoForm, setDiaPagoForm] = useState(hoyISO())
@@ -84,13 +85,19 @@ export default function Cobranza() {
     if (estaPagado(alumno.id)) return 'pagado'
     return hoyISO() > fechaVencimiento ? 'vencido' : 'pendiente'
   }
-  function cuotaEsperada(clasesReales) { return cuotasValores[clasesReales] ?? null }
+  function cuotaBase(clasesReales) { return cuotasValores[clasesReales] ?? 0 }
+  function cuotaEsperada(alumno) {
+    const c = cobranzaDe(alumno.id)
+    if (c && c.monto_esperado !== null && c.monto_esperado !== undefined) return Number(c.monto_esperado)
+    return cuotaBase(alumno.clasesReales)
+  }
 
   const alumnosCobrables = alumnosDelMes.filter(a => !a.exento_pago)
-  const proyectado = alumnosCobrables.reduce((acc, a) => acc + (cuotaEsperada(a.clasesReales) || 0), 0)
+  const proyectado = alumnosCobrables.reduce((acc, a) => acc + cuotaEsperada(a), 0)
   const cobradoReal = cobranzas.reduce((acc, c) => acc + (Number(c.monto) || 0), 0)
   const totalEfectivo = cobranzas.filter(c => c.forma_pago === 'Efectivo').reduce((acc, c) => acc + (Number(c.monto) || 0), 0)
   const totalTransferencia = cobranzas.filter(c => c.forma_pago === 'Transferencia').reduce((acc, c) => acc + (Number(c.monto) || 0), 0)
+  const pendienteCobrar = proyectado - cobradoReal
   const pendientes = alumnosCobrables.filter(a => estadoDe(a) === 'pendiente').length
   const vencidos = alumnosCobrables.filter(a => estadoDe(a) === 'vencido').length
 
@@ -107,7 +114,8 @@ export default function Cobranza() {
   function abrirPago(alumno) {
     const existente = cobranzaDe(alumno.id)
     setPagoModal({ alumno, existente })
-    setMontoForm(existente && existente.monto ? String(existente.monto) : String(cuotaEsperada(alumno.clasesReales) || ''))
+    setMontoForm(existente && existente.monto ? String(existente.monto) : '')
+    setMontoEsperadoForm(String(cuotaEsperada(alumno)))
     setFormaForm(existente?.forma_pago || 'Efectivo')
     setCuentaForm(existente?.cuenta_id || null)
     setDiaPagoForm(existente?.dia_pago || hoyISO())
@@ -115,13 +123,15 @@ export default function Cobranza() {
 
   async function guardarPago() {
     if (!pagoModal) return
+    const montoPagado = parseFloat(montoForm) || 0
     const payload = {
       alumno_id: pagoModal.alumno.id,
       mes,
-      monto: parseFloat(montoForm) || 0,
-      forma_pago: formaForm,
-      cuenta_id: formaForm === 'Transferencia' ? cuentaForm : null,
-      dia_pago: diaPagoForm
+      monto: montoPagado,
+      monto_esperado: montoEsperadoForm === '' ? null : parseFloat(montoEsperadoForm),
+      forma_pago: montoPagado > 0 ? formaForm : null,
+      cuenta_id: montoPagado > 0 && formaForm === 'Transferencia' ? cuentaForm : null,
+      dia_pago: montoPagado > 0 ? diaPagoForm : null
     }
     if (pagoModal.existente) {
       await supabase.from('cobranzas').update(payload).eq('id', pagoModal.existente.id)
@@ -156,6 +166,8 @@ export default function Cobranza() {
     exento: 'bg-[#E3E3DE] text-[#8A8378]'
   }
   const labelEstado = { pagado: 'Pagado', pendiente: 'Pendiente', vencido: 'Vencido', exento: 'Exento' }
+  const contadorFiltro = { pagado: 0, pendiente: 0, vencido: 0, exento: 0 }
+  alumnosDelMes.forEach(a => { contadorFiltro[estadoDe(a)] = (contadorFiltro[estadoDe(a)] || 0) + 1 })
 
   return (
     <div className="min-h-screen bg-[#ECE6DA] px-4 py-6 md:px-12 md:py-8">
@@ -182,42 +194,47 @@ export default function Cobranza() {
       </div>
 
       <p className="text-xs text-[#8A8378] uppercase tracking-widest mb-1">Cobranza</p>
-      <p className="text-xs text-[#8A8378] mb-5">Vencimiento del mes: día 10</p>
+      <p className="text-xs text-[#8A8378] mb-6">Vencimiento del mes: día 10</p>
 
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
-        <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
-          <p className="text-xs text-[#8A8378] mb-1">Proyectado</p>
-          <p className="text-xl font-semibold text-[#221F1B]">${proyectado.toLocaleString('es-AR')}</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="flex flex-col gap-3">
+          <p className="text-[11px] uppercase tracking-widest text-[#8A8378]">Cobrado</p>
+          <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
+            <p className="text-xs text-[#8A8378] mb-1">Cobrado real</p>
+            <p className="text-2xl font-semibold text-[#5C6F5D]">${cobradoReal.toLocaleString('es-AR')}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
+              <p className="text-xs text-[#8A8378] mb-1">Efectivo</p>
+              <p className="text-lg font-semibold text-[#221F1B]">${totalEfectivo.toLocaleString('es-AR')}</p>
+            </div>
+            <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
+              <p className="text-xs text-[#8A8378] mb-1">Transferencia</p>
+              <p className="text-lg font-semibold text-[#221F1B]">${totalTransferencia.toLocaleString('es-AR')}</p>
+              {transferenciasPorCuenta.map(t => (
+                <p key={t.nombre} className="text-sm text-[#8A8378] mt-1">{t.nombre}: ${t.total.toLocaleString('es-AR')}</p>
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
-          <p className="text-xs text-[#8A8378] mb-1">Cobrado real</p>
-          <p className="text-xl font-semibold text-[#5C6F5D]">${cobradoReal.toLocaleString('es-AR')}</p>
-        </div>
-        <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
-          <p className="text-xs text-[#8A8378] mb-1">Efectivo</p>
-          <p className="text-xl font-semibold text-[#221F1B]">${totalEfectivo.toLocaleString('es-AR')}</p>
-        </div>
-        <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
-          <p className="text-xs text-[#8A8378] mb-1">Transferencia</p>
-          <p className="text-xl font-semibold text-[#221F1B]">${totalTransferencia.toLocaleString('es-AR')}</p>
-          {transferenciasPorCuenta.map(t => (
-            <p key={t.nombre} className="text-[10px] text-[#8A8378]">{t.nombre}: ${t.total.toLocaleString('es-AR')}</p>
-          ))}
-        </div>
-        <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
-          <p className="text-xs text-[#8A8378] mb-1">Pendientes</p>
-          <p className="text-xl font-semibold text-[#8A6B2C]">{pendientes}</p>
-        </div>
-        <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
-          <p className="text-xs text-[#8A8378] mb-1">Vencidos</p>
-          <p className="text-xl font-semibold text-[#B5504A]">{vencidos}</p>
+
+        <div className="flex flex-col gap-3">
+          <p className="text-[11px] uppercase tracking-widest text-[#8A8378]">Proyección</p>
+          <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
+            <p className="text-xs text-[#8A8378] mb-1">Proyectado</p>
+            <p className="text-2xl font-semibold text-[#221F1B]">${proyectado.toLocaleString('es-AR')}</p>
+          </div>
+          <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
+            <p className="text-xs text-[#8A8378] mb-1">Pendiente de cobrar</p>
+            <p className="text-2xl font-semibold text-[#B5504A]">${pendienteCobrar.toLocaleString('es-AR')}</p>
+          </div>
         </div>
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
         {['todos', 'pagado', 'pendiente', 'vencido', 'exento'].map(f => (
           <button key={f} onClick={() => setFiltro(f)} className={`px-4 py-1.5 rounded-full text-sm border ${filtro === f ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15 hover:border-[#5C6F5D]'}`}>
-            {f === 'todos' ? 'Todos' : labelEstado[f] + 's'}
+            {f === 'todos' ? `Todos (${alumnosDelMes.length})` : `${labelEstado[f]}s (${contadorFiltro[f] || 0})`}
           </button>
         ))}
       </div>
@@ -231,7 +248,8 @@ export default function Cobranza() {
               <tr className="border-b border-[#221F1B]/10 bg-[#F3EEE4]">
                 <th className="text-left px-4 py-3 text-sm font-semibold text-[#221F1B]">Alumno</th>
                 <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Clases/sem</th>
-                <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Cuota</th>
+                <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Proyectado</th>
+                <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Pagado</th>
                 <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Estado</th>
                 <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Forma de pago</th>
                 <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Cuenta</th>
@@ -247,7 +265,10 @@ export default function Cobranza() {
                     <td className="px-4 py-3 text-sm text-[#221F1B]">{a.nombre}</td>
                     <td className="px-4 py-3 text-sm text-center text-[#221F1B]">{a.clasesReales}</td>
                     <td className="px-4 py-3 text-sm text-center text-[#221F1B]">
-                      {a.exento_pago ? '—' : `$${(cuotaEsperada(a.clasesReales) ?? 0).toLocaleString('es-AR')}`}
+                      {a.exento_pago ? '—' : `$${cuotaEsperada(a).toLocaleString('es-AR')}`}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-center text-[#221F1B]">
+                      {c?.monto ? `$${Number(c.monto).toLocaleString('es-AR')}` : '—'}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${chipEstado[estado]}`}>
@@ -259,7 +280,7 @@ export default function Cobranza() {
                     <td className="px-4 py-3 text-center">
                       {!a.exento_pago && (
                         <button onClick={() => abrirPago(a)} className="text-xs text-[#5C6F5D] hover:underline">
-                          {estaPagado(a.id) ? 'Editar' : 'Registrar'}
+                          {c ? 'Editar' : 'Registrar'}
                         </button>
                       )}
                     </td>
@@ -267,7 +288,7 @@ export default function Cobranza() {
                 )
               })}
               {alumnosFiltrados.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-[#8A8378]">Sin resultados</td></tr>
+                <tr><td colSpan={8} className="px-4 py-6 text-center text-sm text-[#8A8378]">Sin resultados</td></tr>
               )}
             </tbody>
           </table>
@@ -280,7 +301,11 @@ export default function Cobranza() {
             <p className="text-sm font-medium text-[#221F1B] mb-1">{pagoModal.alumno.nombre}</p>
             <p className="text-xs text-[#8A8378] mb-4">{labelMes} · {pagoModal.alumno.clasesReales} clases/semana</p>
 
-            <label className="block text-xs text-[#8A8378] mb-1">Monto pagado</label>
+            <label className="block text-xs text-[#8A8378] mb-1">Proyección para este alumno este mes</label>
+            <input type="number" value={montoEsperadoForm} onChange={e => setMontoEsperadoForm(e.target.value)} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-1 outline-none focus:border-[#5C6F5D]" />
+            <p className="text-[11px] text-[#8A8378] mb-3">Ajustala si entró a mitad de mes, paga distinto, o cualquier caso especial — así el proyectado no miente.</p>
+
+            <label className="block text-xs text-[#8A8378] mb-1">Monto pagado (dejalo vacío si todavía no pagó)</label>
             <input type="number" value={montoForm} onChange={e => setMontoForm(e.target.value)} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
 
             <label className="block text-xs text-[#8A8378] mb-1">Forma de pago</label>
