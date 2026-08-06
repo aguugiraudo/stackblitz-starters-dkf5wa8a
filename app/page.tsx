@@ -15,6 +15,16 @@ function formatHoraCompleta(hora) {
   return hora.slice(0, 5)
 }
 
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + w, y, x + w, y + h, r)
+  ctx.arcTo(x + w, y + h, x, y + h, r)
+  ctx.arcTo(x, y + h, x, y, r)
+  ctx.arcTo(x, y, x + w, y, r)
+  ctx.closePath()
+}
+
 export default function Grilla() {
   const [horarios, setHorarios] = useState([])
   const [inscripciones, setInscripciones] = useState([])
@@ -31,6 +41,10 @@ export default function Grilla() {
   const [camasConsulta, setCamasConsulta] = useState(1)
   const [textoCopiado, setTextoCopiado] = useState(false)
   const [diaMovil, setDiaMovil] = useState(DIAS[0])
+  const [fondoImg, setFondoImg] = useState(null)
+  const [logoImg, setLogoImg] = useState(null)
+  const [direccionForm, setDireccionForm] = useState('Falucho 9')
+  const [telefonoForm, setTelefonoForm] = useState('3492-657457')
   const canvasRef = useRef(null)
 
   const cargar = useCallback(async () => {
@@ -49,7 +63,13 @@ export default function Grilla() {
     setCargando(false)
   }, [mes])
 
-  useEffect(() => { cargar() }, [mes])
+  useEffect(() => { cargar() }, [cargar])
+
+  useEffect(() => {
+    const img = new Image()
+    img.onload = () => setLogoImg(img)
+    img.src = '/logo.png'
+  }, [])
 
   function cambiarMes(delta) {
     const [y, m] = mes.split('-').map(Number)
@@ -188,54 +208,91 @@ export default function Grilla() {
     const W = 1080, H = 1920
     canvas.width = W; canvas.height = H
 
-    ctx.fillStyle = '#ECE6DA'
-    ctx.fillRect(0, 0, W, H)
+    // ---- Fondo ----
+    if (fondoImg) {
+      const scale = Math.max(W / fondoImg.width, H / fondoImg.height)
+      const w = fondoImg.width * scale, h = fondoImg.height * scale
+      ctx.drawImage(fondoImg, (W - w) / 2, (H - h) / 2, w, h)
+      ctx.fillStyle = 'rgba(0,0,0,0.12)'
+      ctx.fillRect(0, 0, W, H)
+    } else {
+      ctx.fillStyle = '#3B4552'
+      ctx.fillRect(0, 0, W, H)
+    }
 
-    ctx.fillStyle = '#8A8378'
-    ctx.font = '500 28px monospace'
-    ctx.textAlign = 'center'
-    ctx.letterSpacing = '6px'
-    ctx.fillText('ROMANA STUDIO', W / 2, 180)
+    // ---- Tarjeta crema ----
+    const cardX = 90, cardY = 320, cardW = W - 180
+    let cardH = 620
+    const filasDias = bloquesPlaca.length > 0 ? bloquesPlaca.length : 1
+    cardH += filasDias * 150
 
-    ctx.fillStyle = '#221F1B'
-    ctx.font = '700 88px sans-serif'
-    ctx.letterSpacing = '0px'
-    ctx.fillText('ÚLTIMOS CUPOS', W / 2, 300)
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,0.25)'
+    ctx.shadowBlur = 30
+    ctx.fillStyle = '#F3ECDE'
+    roundRect(ctx, cardX, cardY, cardW, cardH, 6)
+    ctx.fill()
+    ctx.restore()
 
-    ctx.fillStyle = '#5C6F5D'
-    ctx.font = '600 56px sans-serif'
-    ctx.fillText(labelMes.toUpperCase(), W / 2, 380)
-
-    ctx.strokeStyle = 'rgba(34,31,27,0.12)'
-    ctx.lineWidth = 2
+    // ---- Badge circular con logo ----
+    const badgeR = 130
+    const badgeCx = W / 2, badgeCy = cardY
+    ctx.save()
     ctx.beginPath()
-    ctx.moveTo(140, 460)
-    ctx.lineTo(W - 140, 460)
-    ctx.stroke()
+    ctx.arc(badgeCx, badgeCy, badgeR, 0, Math.PI * 2)
+    ctx.fillStyle = '#D9CFC0'
+    ctx.fill()
+    ctx.clip()
+    if (logoImg) {
+      const s = Math.min((badgeR * 1.5) / logoImg.width, (badgeR * 1.5) / logoImg.height)
+      const lw = logoImg.width * s, lh = logoImg.height * s
+      ctx.drawImage(logoImg, badgeCx - lw / 2, badgeCy - lh / 2, lw, lh)
+    }
+    ctx.restore()
 
-    let y = 580
-    const lineHeight = 90
+    // ---- Título ----
+    ctx.textAlign = 'center'
+    ctx.fillStyle = '#3A2418'
+    ctx.font = '700 50px sans-serif'
+    ctx.fillText('ÚLTIMOS CUPOS', W / 2, cardY + badgeR + 100)
+    ctx.fillText('DISPONIBLES', W / 2, cardY + badgeR + 160)
+
+    // ---- Días ----
+    let y = cardY + badgeR + 260
     if (bloquesPlaca.length === 0) {
-      ctx.fillStyle = '#8A8378'
-      ctx.font = '500 40px sans-serif'
-      ctx.fillText('Sin cupos disponibles por el momento', W / 2, y)
+      ctx.font = '500 36px sans-serif'
+      ctx.fillText('Sin cupos disponibles', W / 2, y)
+      y += 90
     } else {
       bloquesPlaca.forEach(b => {
-        ctx.fillStyle = '#221F1B'
-        ctx.font = '700 48px sans-serif'
-        ctx.fillText(b.dia, W / 2, y)
-        y += 62
-        ctx.fillStyle = '#5C6F5D'
-        ctx.font = '500 42px monospace'
-        ctx.fillText(b.horasLibres.join('   /   '), W / 2, y)
-        y += lineHeight
+        ctx.font = '700 42px sans-serif'
+        ctx.fillText(b.dia.toUpperCase(), W / 2, y)
+        y += 54
+        ctx.font = '500 36px sans-serif'
+        ctx.fillText(b.horasLibres.join(' - '), W / 2, y)
+        y += 96
       })
     }
 
-    ctx.fillStyle = '#8A8378'
-    ctx.font = '400 32px sans-serif'
-    ctx.fillText('Consultá por WhatsApp', W / 2, H - 140)
-  }, [placaAbierta, bloquesPlaca, labelMes])
+    // ---- Pie: dirección y teléfono ----
+    ctx.font = '700 34px sans-serif'
+    ctx.fillStyle = '#3A2418'
+    ctx.fillText(direccionForm.toUpperCase(), W / 2, cardY + cardH - 90)
+    ctx.font = '600 32px sans-serif'
+    ctx.fillText(telefonoForm, W / 2, cardY + cardH - 42)
+  }, [placaAbierta, bloquesPlaca, labelMes, fondoImg, logoImg, direccionForm, telefonoForm])
+
+  function onFondoChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => setFondoImg(img)
+      img.src = reader.result
+    }
+    reader.readAsDataURL(file)
+  }
 
   function descargarPlaca() {
     const canvas = canvasRef.current
@@ -483,6 +540,24 @@ export default function Grilla() {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4 py-8" onClick={() => setPlacaAbierta(false)}>
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-medium text-[#221F1B] mb-3">Placa para Instagram — {labelMes}</p>
+
+            <div className="flex gap-2 mb-3">
+              <label className="flex-1 text-center px-3 py-2 rounded-full text-sm border border-[#221F1B]/15 text-[#221F1B] hover:border-[#5C6F5D] cursor-pointer">
+                {fondoImg ? 'Cambiar foto de fondo' : '+ Subir foto de fondo'}
+                <input type="file" accept="image/*" onChange={onFondoChange} className="hidden" />
+              </label>
+              {fondoImg && (
+                <button onClick={() => setFondoImg(null)} className="px-3 py-2 rounded-full text-sm border border-[#221F1B]/15 text-[#B5504A] hover:bg-[#F5F1E9]">
+                  Quitar
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <input value={direccionForm} onChange={e => setDireccionForm(e.target.value)} placeholder="Dirección" className="border border-[#221F1B]/15 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#5C6F5D]" />
+              <input value={telefonoForm} onChange={e => setTelefonoForm(e.target.value)} placeholder="Teléfono" className="border border-[#221F1B]/15 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-[#5C6F5D]" />
+            </div>
+
             <div className="rounded-xl overflow-hidden border border-[#221F1B]/8 mb-4">
               <canvas ref={canvasRef} className="w-full h-auto block" />
             </div>
