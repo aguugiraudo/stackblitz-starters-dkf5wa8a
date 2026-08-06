@@ -1,0 +1,393 @@
+'use client'
+import { useEffect, useState, useCallback } from 'react'
+import { supabase } from '../lib/supabase'
+
+const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
+function hoyISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function esSueldo(g) { return (g.concepto || '').startsWith('Sueldo ') }
+
+export default function Gastos() {
+  const [mes, setMes] = useState('2026-08-01')
+  const [cargando, setCargando] = useState(true)
+  const [gastos, setGastos] = useState([])
+  const [profes, setProfes] = useState([])
+  const [cuentas, setCuentas] = useState([])
+  const [modal, setModal] = useState(null) // { editando } o {} para nuevo
+  const [modo, setModo] = useState('simple') // 'simple' | 'sueldo'
+  const [fechaForm, setFechaForm] = useState(hoyISO())
+  const [conceptoForm, setConceptoForm] = useState('')
+  const [categoriaForm, setCategoriaForm] = useState('Variable')
+  const [montoForm, setMontoForm] = useState('')
+  const [profeIdForm, setProfeIdForm] = useState('')
+  const [horasForm, setHorasForm] = useState('')
+  const [tarifaForm, setTarifaForm] = useState('')
+  const [formaPagoForm, setFormaPagoForm] = useState('Efectivo')
+  const [cuentaIdForm, setCuentaIdForm] = useState(null)
+  const [nuevoProfeNombre, setNuevoProfeNombre] = useState('')
+  const [mostrandoNuevoProfe, setMostrandoNuevoProfe] = useState(false)
+  const [confirmarBorrar, setConfirmarBorrar] = useState(null)
+
+  const cargar = useCallback(async () => {
+    setCargando(true)
+    const [y, m] = mes.split('-').map(Number)
+    const finMes = new Date(y, m, 1)
+    const finMesISO = `${finMes.getFullYear()}-${String(finMes.getMonth() + 1).padStart(2, '0')}-01`
+
+    const { data: g } = await supabase
+      .from('gastos').select('*, cuentas(nombre)')
+      .gte('fecha', mes).lt('fecha', finMesISO)
+      .order('fecha', { ascending: false })
+    setGastos(g || [])
+
+    const { data: p } = await supabase.from('profes').select('*').order('nombre')
+    setProfes(p || [])
+
+    const { data: ct } = await supabase.from('cuentas').select('*').order('nombre')
+    setCuentas(ct || [])
+
+    setCargando(false)
+  }, [mes])
+
+  useEffect(() => { cargar() }, [mes])
+
+  function cambiarMes(delta) {
+    const [y, m] = mes.split('-').map(Number)
+    const fecha = new Date(y, m - 1 + delta, 1)
+    setMes(`${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-01`)
+  }
+  const [anio, mesNum] = mes.split('-').map(Number)
+  const labelMes = `${NOMBRES_MES[mesNum - 1]} ${anio}`
+
+  const totalFijos = gastos.filter(g => g.categoria === 'Fijo').reduce((acc, g) => acc + Number(g.monto), 0)
+  const totalSueldos = gastos.filter(g => esSueldo(g)).reduce((acc, g) => acc + Number(g.monto), 0)
+  const totalVariablesResto = gastos.filter(g => g.categoria === 'Variable' && !esSueldo(g)).reduce((acc, g) => acc + Number(g.monto), 0)
+  const totalGeneral = totalFijos + totalSueldos + totalVariablesResto
+
+  const totalEfectivo = gastos.filter(g => g.forma_pago === 'Efectivo').reduce((acc, g) => acc + Number(g.monto), 0)
+  const totalesPorCuenta = cuentas.map(ct => ({
+    nombre: ct.nombre,
+    total: gastos.filter(g => g.forma_pago === 'Transferencia' && g.cuenta_id === ct.id).reduce((acc, g) => acc + Number(g.monto), 0)
+  }))
+
+  function abrirNuevo() {
+    setModal({})
+    setModo('simple')
+    setFechaForm(hoyISO())
+    setConceptoForm('')
+    setCategoriaForm('Variable')
+    setMontoForm('')
+    setProfeIdForm(profes[0]?.id || '')
+    setHorasForm('')
+    setTarifaForm(profes[0]?.tarifa_hora ? String(profes[0].tarifa_hora) : '')
+    setFormaPagoForm('Efectivo')
+    setCuentaIdForm(null)
+    setMostrandoNuevoProfe(false)
+  }
+
+  function abrirEditar(g) {
+    setModal({ editando: g })
+    setModo(esSueldo(g) ? 'sueldo' : 'simple')
+    setFechaForm(g.fecha)
+    setConceptoForm(g.concepto)
+    setCategoriaForm(g.categoria)
+    setMontoForm(String(g.monto))
+    setFormaPagoForm(g.forma_pago || 'Efectivo')
+    setCuentaIdForm(g.cuenta_id || null)
+    setMostrandoNuevoProfe(false)
+  }
+
+  function elegirProfe(id) {
+    setProfeIdForm(id)
+    const p = profes.find(x => x.id === id)
+    if (p) setTarifaForm(String(p.tarifa_hora))
+  }
+
+  async function crearProfe() {
+    const nombre = nuevoProfeNombre.trim()
+    if (!nombre) return
+    const { data: nuevo, error } = await supabase.from('profes').insert({ nombre, tarifa_hora: 12000 }).select().single()
+    if (error) { alert('No se pudo crear el profe: ' + error.message); return }
+    setProfes([...profes, nuevo].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+    setProfeIdForm(nuevo.id)
+    setTarifaForm(String(nuevo.tarifa_hora))
+    setNuevoProfeNombre('')
+    setMostrandoNuevoProfe(false)
+  }
+
+  const montoCalculadoSueldo = (parseFloat(horasForm) || 0) * (parseFloat(tarifaForm) || 0)
+
+  async function guardarGasto() {
+    let payload
+    if (modo === 'sueldo') {
+      const profe = profes.find(p => p.id === profeIdForm)
+      if (!profe || !horasForm) { alert('Completá el profe y las horas'); return }
+      payload = {
+        fecha: fechaForm,
+        concepto: `Sueldo ${profe.nombre} (${horasForm}hs)`,
+        categoria: 'Variable',
+        monto: montoCalculadoSueldo,
+        forma_pago: formaPagoForm,
+        cuenta_id: formaPagoForm === 'Transferencia' ? cuentaIdForm : null,
+        pagado_por: profe.nombre
+      }
+    } else {
+      if (!conceptoForm.trim() || !montoForm) { alert('Completá concepto y monto'); return }
+      payload = {
+        fecha: fechaForm,
+        concepto: conceptoForm.trim(),
+        categoria: categoriaForm,
+        monto: parseFloat(montoForm) || 0,
+        forma_pago: formaPagoForm,
+        cuenta_id: formaPagoForm === 'Transferencia' ? cuentaIdForm : null,
+        pagado_por: null
+      }
+    }
+
+    if (modal.editando) {
+      await supabase.from('gastos').update(payload).eq('id', modal.editando.id)
+    } else {
+      await supabase.from('gastos').insert(payload)
+    }
+    setModal(null)
+    cargar()
+  }
+
+  async function confirmarBorrarGasto() {
+    if (!confirmarBorrar) return
+    await supabase.from('gastos').delete().eq('id', confirmarBorrar.id)
+    setConfirmarBorrar(null)
+    cargar()
+  }
+
+  return (
+    <div className="min-h-screen bg-[#ECE6DA] px-4 py-6 md:px-12 md:py-8">
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+        <p className="text-3xl md:text-4xl text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
+          Romana Studio
+        </p>
+        <nav className="flex gap-4">
+          <a href="/" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Días y Horarios</a>
+          <a href="/cobranza" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cobranza</a>
+          <a href="/gastos" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Gastos</a>
+          <a href="/alumnos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Alumnos</a>
+        </nav>
+      </div>
+
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <button onClick={() => cambiarMes(-1)} className="w-8 h-8 rounded-full bg-white border border-[#221F1B]/10 flex items-center justify-center text-[#221F1B] hover:bg-[#F5F1E9]">‹</button>
+          <span className="text-sm font-medium text-[#221F1B] min-w-[140px] text-center">{labelMes}</span>
+          <button onClick={() => cambiarMes(1)} className="w-8 h-8 rounded-full bg-white border border-[#221F1B]/10 flex items-center justify-center text-[#221F1B] hover:bg-[#F5F1E9]">›</button>
+        </div>
+        <button onClick={abrirNuevo} className="text-sm px-4 py-2 rounded-full bg-[#5C6F5D] text-white hover:bg-[#4C5C4D]">
+          + Registrar gasto
+        </button>
+      </div>
+
+      <p className="text-xs text-[#8A8378] uppercase tracking-widest mb-6">Gastos</p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="flex flex-col gap-3">
+          <p className="text-[11px] uppercase tracking-widest text-[#8A8378]">Por categoría</p>
+          <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
+            <p className="text-xs text-[#8A8378] mb-1">Total gastado</p>
+            <p className="text-2xl font-semibold text-[#B5504A]">${totalGeneral.toLocaleString('es-AR')}</p>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-3 py-3">
+              <p className="text-xs text-[#8A8378] mb-1">Fijos</p>
+              <p className="text-base font-semibold text-[#221F1B]">${totalFijos.toLocaleString('es-AR')}</p>
+            </div>
+            <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-3 py-3">
+              <p className="text-xs text-[#8A8378] mb-1">Sueldos</p>
+              <p className="text-base font-semibold text-[#221F1B]">${totalSueldos.toLocaleString('es-AR')}</p>
+            </div>
+            <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-3 py-3">
+              <p className="text-xs text-[#8A8378] mb-1">Variables</p>
+              <p className="text-base font-semibold text-[#221F1B]">${totalVariablesResto.toLocaleString('es-AR')}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <p className="text-[11px] uppercase tracking-widest text-[#8A8378]">De dónde salió</p>
+          <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
+            <p className="text-xs text-[#8A8378] mb-1">Efectivo</p>
+            <p className="text-2xl font-semibold text-[#221F1B]">${totalEfectivo.toLocaleString('es-AR')}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {totalesPorCuenta.map(t => (
+              <div key={t.nombre} className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-3 py-3">
+                <p className="text-xs text-[#8A8378] mb-1">{t.nombre}</p>
+                <p className="text-base font-semibold text-[#221F1B]">${t.total.toLocaleString('es-AR')}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {cargando ? (
+        <p className="text-[#8A8378] text-sm">Cargando gastos…</p>
+      ) : (
+        <div className="bg-[#FBF9F5] rounded-2xl border border-[#221F1B]/8 overflow-hidden overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-[#221F1B]/10 bg-[#F3EEE4]">
+                <th className="text-left px-4 py-3 text-sm font-semibold text-[#221F1B]">Fecha</th>
+                <th className="text-left px-4 py-3 text-sm font-semibold text-[#221F1B]">Concepto</th>
+                <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Categoría</th>
+                <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Monto</th>
+                <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Salió de</th>
+                <th className="w-28"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {gastos.map(g => (
+                <tr key={g.id} className="border-b border-[#221F1B]/8 last:border-0 hover:bg-[#F5F1E9]">
+                  <td className="px-4 py-3 text-sm text-[#221F1B]">{g.fecha}</td>
+                  <td className="px-4 py-3 text-sm text-[#221F1B]">{g.concepto}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`text-xs px-2 py-1 rounded-full ${esSueldo(g) ? 'bg-[#8A6B2C] text-white' : g.categoria === 'Fijo' ? 'bg-[#5C6F5D] text-white' : 'bg-[#EDE7DD] text-[#8A8378]'}`}>
+                      {esSueldo(g) ? 'Sueldo' : g.categoria}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-center text-[#221F1B]">${Number(g.monto).toLocaleString('es-AR')}</td>
+                  <td className="px-4 py-3 text-sm text-center text-[#221F1B]">
+                    {g.forma_pago === 'Transferencia' ? g.cuentas?.nombre || 'Transferencia' : (g.forma_pago || '—')}
+                  </td>
+                  <td className="px-4 py-3 text-center whitespace-nowrap">
+                    <button onClick={() => abrirEditar(g)} className="text-xs text-[#5C6F5D] hover:underline mr-3">Editar</button>
+                    <button onClick={() => setConfirmarBorrar(g)} className="text-xs text-[#B5504A] hover:underline">Borrar</button>
+                  </td>
+                </tr>
+              ))}
+              {gastos.length === 0 && (
+                <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-[#8A8378]">Sin gastos cargados este mes</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {modal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4 py-8" onClick={() => setModal(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-[#221F1B] mb-4">{modal.editando ? 'Editar gasto' : 'Registrar gasto'}</p>
+
+            {!modal.editando && (
+              <div className="flex gap-2 mb-4">
+                <button onClick={() => setModo('simple')} className={`px-4 py-1.5 rounded-full text-sm border ${modo === 'simple' ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
+                  Gasto simple
+                </button>
+                <button onClick={() => setModo('sueldo')} className={`px-4 py-1.5 rounded-full text-sm border ${modo === 'sueldo' ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
+                  Sueldo de profe
+                </button>
+              </div>
+            )}
+
+            <label className="block text-xs text-[#8A8378] mb-1">Fecha</label>
+            <input type="date" value={fechaForm} onChange={e => setFechaForm(e.target.value)} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
+
+            {modo === 'simple' ? (
+              <>
+                <label className="block text-xs text-[#8A8378] mb-1">Concepto</label>
+                <input value={conceptoForm} onChange={e => setConceptoForm(e.target.value)} placeholder="Ej: Alquiler, Luz, Insumos…" className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
+
+                <label className="block text-xs text-[#8A8378] mb-1">Categoría</label>
+                <div className="flex gap-2 mb-3">
+                  {['Fijo', 'Variable'].map(c => (
+                    <button key={c} onClick={() => setCategoriaForm(c)} className={`px-4 py-1.5 rounded-full text-sm border ${categoriaForm === c ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+
+                <label className="block text-xs text-[#8A8378] mb-1">Monto</label>
+                <input type="number" value={montoForm} onChange={e => setMontoForm(e.target.value)} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
+              </>
+            ) : (
+              <>
+                <label className="block text-xs text-[#8A8378] mb-1">Profe</label>
+                {!mostrandoNuevoProfe ? (
+                  <div className="flex gap-2 mb-3 flex-wrap items-center">
+                    {profes.map(p => (
+                      <button key={p.id} onClick={() => elegirProfe(p.id)} className={`px-3 py-1.5 rounded-full text-sm border ${profeIdForm === p.id ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
+                        {p.nombre}
+                      </button>
+                    ))}
+                    <button onClick={() => setMostrandoNuevoProfe(true)} className="text-xs text-[#5C6F5D] hover:underline px-2">+ nuevo profe</button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2 mb-3">
+                    <input autoFocus value={nuevoProfeNombre} onChange={e => setNuevoProfeNombre(e.target.value)} placeholder="Nombre del profe" className="flex-1 border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5C6F5D]" />
+                    <button onClick={crearProfe} className="px-3 py-2 rounded-lg text-sm bg-[#5C6F5D] text-white">Crear</button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3 mb-1">
+                  <div>
+                    <label className="block text-xs text-[#8A8378] mb-1">Horas del mes</label>
+                    <input type="number" value={horasForm} onChange={e => setHorasForm(e.target.value)} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5C6F5D]" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#8A8378] mb-1">$ / hora</label>
+                    <input type="number" value={tarifaForm} onChange={e => setTarifaForm(e.target.value)} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#5C6F5D]" />
+                  </div>
+                </div>
+                <p className="text-sm text-[#221F1B] mb-3">
+                  Total a pagar: <span className="font-semibold">${montoCalculadoSueldo.toLocaleString('es-AR')}</span>
+                </p>
+              </>
+            )}
+
+            <label className="block text-xs text-[#8A8378] mb-1">Forma de pago</label>
+            <div className="flex gap-2 mb-3">
+              {['Efectivo', 'Transferencia'].map(f => (
+                <button key={f} onClick={() => setFormaPagoForm(f)} className={`px-4 py-1.5 rounded-full text-sm border ${formaPagoForm === f ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
+                  {f}
+                </button>
+              ))}
+            </div>
+
+            {formaPagoForm === 'Transferencia' && (
+              <>
+                <label className="block text-xs text-[#8A8378] mb-1">Cuenta de origen</label>
+                <div className="flex gap-2 mb-4 flex-wrap">
+                  {cuentas.map(ct => (
+                    <button key={ct.id} onClick={() => setCuentaIdForm(ct.id)} className={`px-4 py-1.5 rounded-full text-sm border ${cuentaIdForm === ct.id ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
+                      {ct.nombre}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-3 justify-end mt-2">
+              <button onClick={() => setModal(null)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cancelar</button>
+              <button onClick={guardarGasto} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5C6F5D] hover:bg-[#4C5C4D]">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmarBorrar && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4" onClick={() => setConfirmarBorrar(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}>
+            <p className="text-sm text-[#221F1B] mb-6">
+              ¿Seguro que querés borrar <span className="font-semibold">{confirmarBorrar.concepto}</span>?
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button onClick={() => setConfirmarBorrar(null)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cancelar</button>
+              <button onClick={confirmarBorrarGasto} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#B5504A] hover:bg-[#9C4340]">Borrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
