@@ -12,7 +12,7 @@ function hoyISO() {
 export default function Cobranza() {
   const [mes, setMes] = useState('2026-08-01')
   const [cargando, setCargando] = useState(true)
-  const [alumnosDelMes, setAlumnosDelMes] = useState([]) // [{id, nombre, clasesReales}]
+  const [alumnosDelMes, setAlumnosDelMes] = useState([]) // [{id, nombre, clasesReales, exento_pago}]
   const [cobranzas, setCobranzas] = useState([])
   const [cuotasValores, setCuotasValores] = useState({})
   const [cuentas, setCuentas] = useState([])
@@ -23,25 +23,25 @@ export default function Cobranza() {
   const [diaPagoForm, setDiaPagoForm] = useState(hoyISO())
   const [cuotasModal, setCuotasModal] = useState(false)
   const [cuotasEdit, setCuotasEdit] = useState({})
+  const [filtro, setFiltro] = useState('todos')
 
   const cargar = useCallback(async () => {
     setCargando(true)
 
     const { data: insc } = await supabase
       .from('inscripciones')
-      .select('alumno_id, alumnos(id, nombre)')
+      .select('alumno_id, alumnos(id, nombre, exento_pago)')
       .eq('mes', mes).eq('estado', 'activo')
 
-    // Cuenta cuántas veces aparece cada alumno anotado ese mes = clases por semana reales
     const conteos = {}
-    const nombresPorId = {}
+    const datosPorId = {}
     ;(insc || []).forEach(i => {
       if (!i.alumnos) return
       conteos[i.alumno_id] = (conteos[i.alumno_id] || 0) + 1
-      nombresPorId[i.alumno_id] = i.alumnos.nombre
+      datosPorId[i.alumno_id] = i.alumnos
     })
     const lista = Object.keys(conteos).map(id => ({
-      id, nombre: nombresPorId[id], clasesReales: conteos[id]
+      id, nombre: datosPorId[id].nombre, clasesReales: conteos[id], exento_pago: !!datosPorId[id].exento_pago
     })).sort((a, b) => a.nombre.localeCompare(b.nombre))
     setAlumnosDelMes(lista)
 
@@ -72,24 +72,42 @@ export default function Cobranza() {
   const [anio, mesNum] = mes.split('-').map(Number)
   const labelMes = `${NOMBRES_MES[mesNum - 1]} ${anio}`
 
+  const fechaVencimiento = `${mes.slice(0, 8)}10`
+
   function cobranzaDe(alumnoId) { return cobranzas.find(c => c.alumno_id === alumnoId) }
+  function estaPagado(alumnoId) {
+    const c = cobranzaDe(alumnoId)
+    return !!(c && Number(c.monto) > 0)
+  }
+  function estadoDe(alumno) {
+    if (alumno.exento_pago) return 'exento'
+    if (estaPagado(alumno.id)) return 'pagado'
+    return hoyISO() > fechaVencimiento ? 'vencido' : 'pendiente'
+  }
   function cuotaEsperada(clasesReales) { return cuotasValores[clasesReales] ?? null }
 
-  const proyectado = alumnosDelMes.reduce((acc, a) => acc + (cuotaEsperada(a.clasesReales) || 0), 0)
+  const alumnosCobrables = alumnosDelMes.filter(a => !a.exento_pago)
+  const proyectado = alumnosCobrables.reduce((acc, a) => acc + (cuotaEsperada(a.clasesReales) || 0), 0)
   const cobradoReal = cobranzas.reduce((acc, c) => acc + (Number(c.monto) || 0), 0)
   const totalEfectivo = cobranzas.filter(c => c.forma_pago === 'Efectivo').reduce((acc, c) => acc + (Number(c.monto) || 0), 0)
   const totalTransferencia = cobranzas.filter(c => c.forma_pago === 'Transferencia').reduce((acc, c) => acc + (Number(c.monto) || 0), 0)
-  const pendientes = alumnosDelMes.filter(a => !cobranzaDe(a.id)).length
+  const pendientes = alumnosCobrables.filter(a => estadoDe(a) === 'pendiente').length
+  const vencidos = alumnosCobrables.filter(a => estadoDe(a) === 'vencido').length
 
   const transferenciasPorCuenta = cuentas.map(ct => ({
     nombre: ct.nombre,
     total: cobranzas.filter(c => c.forma_pago === 'Transferencia' && c.cuenta_id === ct.id).reduce((acc, c) => acc + (Number(c.monto) || 0), 0)
   }))
 
+  const alumnosFiltrados = alumnosDelMes.filter(a => {
+    if (filtro === 'todos') return true
+    return estadoDe(a) === filtro
+  })
+
   function abrirPago(alumno) {
     const existente = cobranzaDe(alumno.id)
     setPagoModal({ alumno, existente })
-    setMontoForm(existente ? String(existente.monto) : String(cuotaEsperada(alumno.clasesReales) || ''))
+    setMontoForm(existente && existente.monto ? String(existente.monto) : String(cuotaEsperada(alumno.clasesReales) || ''))
     setFormaForm(existente?.forma_pago || 'Efectivo')
     setCuentaForm(existente?.cuenta_id || null)
     setDiaPagoForm(existente?.dia_pago || hoyISO())
@@ -131,10 +149,18 @@ export default function Cobranza() {
     cargar()
   }
 
+  const chipEstado = {
+    pagado: 'bg-[#5C6F5D] text-white',
+    pendiente: 'bg-[#EDE7DD] text-[#8A6B2C]',
+    vencido: 'bg-[#B5504A] text-white',
+    exento: 'bg-[#E3E3DE] text-[#8A8378]'
+  }
+  const labelEstado = { pagado: 'Pagado', pendiente: 'Pendiente', vencido: 'Vencido', exento: 'Exento' }
+
   return (
     <div className="min-h-screen bg-[#ECE6DA] px-4 py-6 md:px-12 md:py-8">
       <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
-        <p className="text-lg text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
+        <p className="text-3xl md:text-4xl text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
           Romana Studio
         </p>
         <nav className="flex gap-4">
@@ -155,9 +181,10 @@ export default function Cobranza() {
         </button>
       </div>
 
-      <p className="text-xs text-[#8A8378] uppercase tracking-widest mb-5">Cobranza</p>
+      <p className="text-xs text-[#8A8378] uppercase tracking-widest mb-1">Cobranza</p>
+      <p className="text-xs text-[#8A8378] mb-5">Vencimiento del mes: día 10</p>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
         <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
           <p className="text-xs text-[#8A8378] mb-1">Proyectado</p>
           <p className="text-xl font-semibold text-[#221F1B]">${proyectado.toLocaleString('es-AR')}</p>
@@ -179,8 +206,20 @@ export default function Cobranza() {
         </div>
         <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
           <p className="text-xs text-[#8A8378] mb-1">Pendientes</p>
-          <p className="text-xl font-semibold text-[#B5504A]">{pendientes}</p>
+          <p className="text-xl font-semibold text-[#8A6B2C]">{pendientes}</p>
         </div>
+        <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
+          <p className="text-xs text-[#8A8378] mb-1">Vencidos</p>
+          <p className="text-xl font-semibold text-[#B5504A]">{vencidos}</p>
+        </div>
+      </div>
+
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {['todos', 'pagado', 'pendiente', 'vencido', 'exento'].map(f => (
+          <button key={f} onClick={() => setFiltro(f)} className={`px-4 py-1.5 rounded-full text-sm border ${filtro === f ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15 hover:border-[#5C6F5D]'}`}>
+            {f === 'todos' ? 'Todos' : labelEstado[f] + 's'}
+          </button>
+        ))}
       </div>
 
       {cargando ? (
@@ -196,36 +235,39 @@ export default function Cobranza() {
                 <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Estado</th>
                 <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Forma de pago</th>
                 <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Cuenta</th>
-                <th className="w-20"></th>
+                <th className="w-24"></th>
               </tr>
             </thead>
             <tbody>
-              {alumnosDelMes.map(a => {
+              {alumnosFiltrados.map(a => {
                 const c = cobranzaDe(a.id)
+                const estado = estadoDe(a)
                 return (
-                  <tr key={a.id} className="border-b border-[#221F1B]/8 last:border-0 hover:bg-[#F5F1E9]">
+                  <tr key={a.id} className={`border-b border-[#221F1B]/8 last:border-0 hover:bg-[#F5F1E9] ${estado === 'vencido' ? 'bg-[#FBEAE8]' : ''}`}>
                     <td className="px-4 py-3 text-sm text-[#221F1B]">{a.nombre}</td>
                     <td className="px-4 py-3 text-sm text-center text-[#221F1B]">{a.clasesReales}</td>
                     <td className="px-4 py-3 text-sm text-center text-[#221F1B]">
-                      ${(cuotaEsperada(a.clasesReales) ?? 0).toLocaleString('es-AR')}
+                      {a.exento_pago ? '—' : `$${(cuotaEsperada(a.clasesReales) ?? 0).toLocaleString('es-AR')}`}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`text-xs px-2 py-1 rounded-full ${c ? 'bg-[#5C6F5D] text-white' : 'bg-[#EDE7DD] text-[#B5504A]'}`}>
-                        {c ? 'Pagado' : 'Pendiente'}
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${chipEstado[estado]}`}>
+                        {labelEstado[estado]}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-center text-[#221F1B]">{c?.forma_pago || '—'}</td>
                     <td className="px-4 py-3 text-sm text-center text-[#221F1B]">{c?.cuentas?.nombre || '—'}</td>
                     <td className="px-4 py-3 text-center">
-                      <button onClick={() => abrirPago(a)} className="text-xs text-[#5C6F5D] hover:underline">
-                        {c ? 'Editar' : 'Registrar'}
-                      </button>
+                      {!a.exento_pago && (
+                        <button onClick={() => abrirPago(a)} className="text-xs text-[#5C6F5D] hover:underline">
+                          {estaPagado(a.id) ? 'Editar' : 'Registrar'}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )
               })}
-              {alumnosDelMes.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-[#8A8378]">Nadie anotado este mes</td></tr>
+              {alumnosFiltrados.length === 0 && (
+                <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-[#8A8378]">Sin resultados</td></tr>
               )}
             </tbody>
           </table>
@@ -238,7 +280,7 @@ export default function Cobranza() {
             <p className="text-sm font-medium text-[#221F1B] mb-1">{pagoModal.alumno.nombre}</p>
             <p className="text-xs text-[#8A8378] mb-4">{labelMes} · {pagoModal.alumno.clasesReales} clases/semana</p>
 
-            <label className="block text-xs text-[#8A8378] mb-1">Monto</label>
+            <label className="block text-xs text-[#8A8378] mb-1">Monto pagado</label>
             <input type="number" value={montoForm} onChange={e => setMontoForm(e.target.value)} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
 
             <label className="block text-xs text-[#8A8378] mb-1">Forma de pago</label>

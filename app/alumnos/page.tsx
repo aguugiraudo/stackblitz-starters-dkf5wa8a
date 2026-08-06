@@ -31,7 +31,7 @@ export default function Alumnos() {
   const [sospechososVigentes, setSospechososVigentes] = useState([])
   const [mesStats, setMesStats] = useState('2026-08-01')
   const [anotadosEnMes, setAnotadosEnMes] = useState(null)
-  const [clasesPorAlumno, setClasesPorAlumno] = useState({}) // { alumno_id: cantidad }
+  const [clasesPorAlumno, setClasesPorAlumno] = useState({})
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -82,7 +82,8 @@ export default function Alumnos() {
     if (!editando) return
     await supabase.from('alumnos').update({
       nombre: editando.nombre,
-      estado: editando.estado
+      estado: editando.estado,
+      exento_pago: editando.exento_pago
     }).eq('id', editando.id)
     setEditando(null)
     cargar()
@@ -141,7 +142,7 @@ export default function Alumnos() {
   return (
     <div className="min-h-screen bg-[#ECE6DA] px-4 py-6 md:px-12 md:py-8">
       <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
-        <p className="text-lg text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
+        <p className="text-3xl md:text-4xl text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
           Romana Studio
         </p>
         <nav className="flex gap-4">
@@ -228,6 +229,9 @@ export default function Alumnos() {
                     <button onClick={() => abrirDetalle(a)} className="text-[#221F1B] hover:text-[#5C6F5D] hover:underline text-left">
                       {a.nombre}
                     </button>
+                    {a.exento_pago && (
+                      <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-[#E3E3DE] text-[#8A8378]">Exento</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-center text-[#221F1B]">{clasesPorAlumno[a.id] ?? 0}</td>
                   <td className="px-4 py-3 text-center">
@@ -254,6 +258,7 @@ export default function Alumnos() {
             <p className="text-sm font-medium text-[#221F1B] mb-1">{viendo.nombre}</p>
             <p className="text-xs text-[#8A8378] mb-4">
               {clasesPorAlumno[viendo.id] ?? 0} clases/semana en {labelMesStats} · {viendo.estado === 'activo' ? 'Activo' : 'Baja'}
+              {viendo.exento_pago ? ' · Exento de pago' : ''}
             </p>
             <p className="text-xs font-medium text-[#8A8378] uppercase tracking-wide mb-2">Horarios en {labelMesStats}</p>
             <div className="flex flex-col gap-1.5 mb-2">
@@ -282,13 +287,27 @@ export default function Alumnos() {
               Clases por semana: <span className="text-[#221F1B] font-medium">{clasesPorAlumno[editando.id] ?? 0}</span> (se calcula solo desde la grilla, no se edita acá)
             </p>
             <label className="block text-xs text-[#8A8378] mb-1">Estado</label>
-            <div className="flex gap-2 mb-5">
+            <div className="flex gap-2 mb-4">
               {['activo', 'baja'].map(e => (
                 <button key={e} onClick={() => setEditando({ ...editando, estado: e })} className={`px-4 py-1.5 rounded-full text-sm border ${editando.estado === e ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
                   {e === 'activo' ? 'Activo' : 'Baja'}
                 </button>
               ))}
             </div>
+
+            <div className="flex items-center justify-between bg-[#F5F1E9] rounded-lg px-3 py-2.5 mb-5">
+              <div>
+                <p className="text-sm text-[#221F1B]">No paga cuota</p>
+                <p className="text-[10px] text-[#8A8378]">No entra en la proyección ni figura como pendiente/vencido</p>
+              </div>
+              <button
+                onClick={() => setEditando({ ...editando, exento_pago: !editando.exento_pago })}
+                className={`w-11 h-6 rounded-full relative transition-colors ${editando.exento_pago ? 'bg-[#5C6F5D]' : 'bg-[#D8D2C4]'}`}
+              >
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${editando.exento_pago ? 'left-5' : 'left-0.5'}`} />
+              </button>
+            </div>
+
             <div className="flex gap-3 justify-end">
               <button onClick={() => setEditando(null)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cancelar</button>
               <button onClick={guardarEdicion} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5C6F5D] hover:bg-[#4C5C4D]">Guardar</button>
