@@ -61,29 +61,24 @@ export default function Finanzas() {
     setEgresoReal(egR)
     setEgresoProyectado(egP)
 
-    // Saldo acumulado por cuenta (histórico, todos los meses)
+    // Saldo por cuenta y caja de efectivo — SOLO del mes seleccionado (se retira todo a fin de mes)
     const { data: cuentas } = await supabase.from('cuentas').select('*').order('nombre')
-    const { data: cobTodas } = await supabase.from('cobranzas').select('monto, forma_pago, cuenta_id').eq('forma_pago', 'Transferencia')
-    const { data: gastosTodos } = await supabase.from('gastos').select('monto, forma_pago, cuenta_id, estado').eq('forma_pago', 'Transferencia').eq('estado', 'Pagado')
 
     const saldos = (cuentas || []).map(ct => {
-      const ingresos = (cobTodas || []).filter(c => c.cuenta_id === ct.id).reduce((acc, c) => acc + Number(c.monto), 0)
-      const egresos = (gastosTodos || []).filter(g => g.cuenta_id === ct.id).reduce((acc, g) => acc + Number(g.monto), 0)
+      const ingresos = (cobMes || []).filter(c => c.forma_pago === 'Transferencia' && c.cuenta_id === ct.id).reduce((acc, c) => acc + Number(c.monto), 0)
+      const egresos = (gastosMes || []).filter(g => g.forma_pago === 'Transferencia' && g.cuenta_id === ct.id && g.estado === 'Pagado').reduce((acc, g) => acc + Number(g.monto), 0)
       return { nombre: ct.nombre, ingresos, egresos, saldo: ingresos - egresos }
     })
     setSaldoPorCuenta(saldos)
 
-    // Caja de efectivo teórica (histórica, todos los meses)
-    const { data: cobEfectivo } = await supabase.from('cobranzas').select('monto').eq('forma_pago', 'Efectivo')
-    const { data: gastosEfectivo } = await supabase.from('gastos').select('monto').eq('forma_pago', 'Efectivo').eq('estado', 'Pagado')
-    const ingresosEf = (cobEfectivo || []).reduce((acc, c) => acc + Number(c.monto), 0)
-    const egresosEf = (gastosEfectivo || []).reduce((acc, g) => acc + Number(g.monto), 0)
+    const ingresosEf = (cobMes || []).filter(c => c.forma_pago === 'Efectivo').reduce((acc, c) => acc + Number(c.monto), 0)
+    const egresosEf = (gastosMes || []).filter(g => g.forma_pago === 'Efectivo' && g.estado === 'Pagado').reduce((acc, g) => acc + Number(g.monto), 0)
     setSaldoEfectivo(ingresosEf - egresosEf)
 
     setCargando(false)
   }, [mes])
 
-  useEffect(() => { cargar() }, [mes])
+  useEffect(() => { cargar() }, [cargar])
 
   function cambiarMes(delta) {
     const [y, m] = mes.split('-').map(Number)
@@ -173,11 +168,11 @@ export default function Finanzas() {
             </div>
           </div>
 
-          <p className="text-[11px] uppercase tracking-widest text-[#8A8378] mb-1">Saldo por cuenta</p>
-          <p className="text-xs text-[#8A8378] mb-3">Acumulado histórico (transferencias cobradas menos gastos pagados desde esa cuenta) — no es el extracto bancario real, es un control de movimiento desde que usamos el sistema.</p>
+          <p className="text-[11px] uppercase tracking-widest text-[#8A8378] mb-1">Caja del mes — {labelMes}</p>
+          <p className="text-xs text-[#8A8378] mb-3">Se reinicia cada mes: lo que entró menos lo que salió de cada cuenta y de efectivo en {labelMes} puntual — no arrastra saldo de meses anteriores, ya que a fin de mes se retira todo como rentabilidad.</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
             <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
-              <p className="text-xs text-[#8A8378] mb-1">Efectivo (caja teórica)</p>
+              <p className="text-xs text-[#8A8378] mb-1">Efectivo</p>
               <p className="text-xl font-semibold text-[#221F1B]">${saldoEfectivo.toLocaleString('es-AR')}</p>
             </div>
             {saldoPorCuenta.map(s => (
@@ -194,7 +189,7 @@ export default function Finanzas() {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4 py-8" onClick={() => setBilletesAbierto(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-medium text-[#221F1B] mb-1">Contador de efectivo</p>
-            <p className="text-xs text-[#8A8378] mb-4">Poné cuántos billetes de cada uno tenés en la caja</p>
+            <p className="text-xs text-[#8A8378] mb-4">Poné cuántos billetes de cada uno tenés en la caja ahora</p>
 
             <div className="flex flex-col gap-2 mb-4">
               {DENOMINACIONES.map(d => (
@@ -221,7 +216,7 @@ export default function Finanzas() {
                 <span className="text-xl font-semibold text-[#221F1B]">${totalContado.toLocaleString('es-AR')}</span>
               </div>
               <div className="flex justify-between mb-1">
-                <span className="text-sm text-[#8A8378]">Caja teórica del sistema</span>
+                <span className="text-sm text-[#8A8378]">Caja teórica de {labelMes}</span>
                 <span className="text-sm text-[#8A8378]">${saldoEfectivo.toLocaleString('es-AR')}</span>
               </div>
               <div className="flex justify-between">
