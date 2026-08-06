@@ -17,8 +17,8 @@ export default function Gastos() {
   const [gastos, setGastos] = useState([])
   const [profes, setProfes] = useState([])
   const [cuentas, setCuentas] = useState([])
-  const [modal, setModal] = useState(null) // { editando } o {} para nuevo
-  const [modo, setModo] = useState('simple') // 'simple' | 'sueldo'
+  const [modal, setModal] = useState(null)
+  const [modo, setModo] = useState('simple')
   const [fechaForm, setFechaForm] = useState(hoyISO())
   const [conceptoForm, setConceptoForm] = useState('')
   const [categoriaForm, setCategoriaForm] = useState('Variable')
@@ -28,9 +28,11 @@ export default function Gastos() {
   const [tarifaForm, setTarifaForm] = useState('')
   const [formaPagoForm, setFormaPagoForm] = useState('Efectivo')
   const [cuentaIdForm, setCuentaIdForm] = useState(null)
+  const [estadoForm, setEstadoForm] = useState('Pagado')
   const [nuevoProfeNombre, setNuevoProfeNombre] = useState('')
   const [mostrandoNuevoProfe, setMostrandoNuevoProfe] = useState(false)
   const [confirmarBorrar, setConfirmarBorrar] = useState(null)
+  const [filtroEstado, setFiltroEstado] = useState('todos')
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -63,16 +65,25 @@ export default function Gastos() {
   const [anio, mesNum] = mes.split('-').map(Number)
   const labelMes = `${NOMBRES_MES[mesNum - 1]} ${anio}`
 
-  const totalFijos = gastos.filter(g => g.categoria === 'Fijo').reduce((acc, g) => acc + Number(g.monto), 0)
-  const totalSueldos = gastos.filter(g => esSueldo(g)).reduce((acc, g) => acc + Number(g.monto), 0)
-  const totalVariablesResto = gastos.filter(g => g.categoria === 'Variable' && !esSueldo(g)).reduce((acc, g) => acc + Number(g.monto), 0)
-  const totalGeneral = totalFijos + totalSueldos + totalVariablesResto
+  const pagados = gastos.filter(g => g.estado === 'Pagado')
+  const proyectados = gastos.filter(g => g.estado === 'Proyectado')
 
-  const totalEfectivo = gastos.filter(g => g.forma_pago === 'Efectivo').reduce((acc, g) => acc + Number(g.monto), 0)
+  const totalFijos = pagados.filter(g => g.categoria === 'Fijo').reduce((acc, g) => acc + Number(g.monto), 0)
+  const totalSueldos = pagados.filter(g => esSueldo(g)).reduce((acc, g) => acc + Number(g.monto), 0)
+  const totalVariablesResto = pagados.filter(g => g.categoria === 'Variable' && !esSueldo(g)).reduce((acc, g) => acc + Number(g.monto), 0)
+  const totalGeneral = totalFijos + totalSueldos + totalVariablesResto
+  const totalProyectado = proyectados.reduce((acc, g) => acc + Number(g.monto), 0)
+
+  const totalEfectivo = pagados.filter(g => g.forma_pago === 'Efectivo').reduce((acc, g) => acc + Number(g.monto), 0)
   const totalesPorCuenta = cuentas.map(ct => ({
     nombre: ct.nombre,
-    total: gastos.filter(g => g.forma_pago === 'Transferencia' && g.cuenta_id === ct.id).reduce((acc, g) => acc + Number(g.monto), 0)
+    total: pagados.filter(g => g.forma_pago === 'Transferencia' && g.cuenta_id === ct.id).reduce((acc, g) => acc + Number(g.monto), 0)
   }))
+
+  const gastosFiltrados = gastos.filter(g => {
+    if (filtroEstado === 'todos') return true
+    return g.estado === filtroEstado
+  })
 
   function abrirNuevo() {
     setModal({})
@@ -86,6 +97,7 @@ export default function Gastos() {
     setTarifaForm(profes[0]?.tarifa_hora ? String(profes[0].tarifa_hora) : '')
     setFormaPagoForm('Efectivo')
     setCuentaIdForm(null)
+    setEstadoForm('Pagado')
     setMostrandoNuevoProfe(false)
   }
 
@@ -98,6 +110,7 @@ export default function Gastos() {
     setMontoForm(String(g.monto))
     setFormaPagoForm(g.forma_pago || 'Efectivo')
     setCuentaIdForm(g.cuenta_id || null)
+    setEstadoForm(g.estado || 'Pagado')
     setMostrandoNuevoProfe(false)
   }
 
@@ -131,9 +144,10 @@ export default function Gastos() {
         concepto: `Sueldo ${profe.nombre} (${horasForm}hs)`,
         categoria: 'Variable',
         monto: montoCalculadoSueldo,
-        forma_pago: formaPagoForm,
-        cuenta_id: formaPagoForm === 'Transferencia' ? cuentaIdForm : null,
-        pagado_por: profe.nombre
+        forma_pago: estadoForm === 'Pagado' ? formaPagoForm : null,
+        cuenta_id: estadoForm === 'Pagado' && formaPagoForm === 'Transferencia' ? cuentaIdForm : null,
+        pagado_por: profe.nombre,
+        estado: estadoForm
       }
     } else {
       if (!conceptoForm.trim() || !montoForm) { alert('Completá concepto y monto'); return }
@@ -142,9 +156,10 @@ export default function Gastos() {
         concepto: conceptoForm.trim(),
         categoria: categoriaForm,
         monto: parseFloat(montoForm) || 0,
-        forma_pago: formaPagoForm,
-        cuenta_id: formaPagoForm === 'Transferencia' ? cuentaIdForm : null,
-        pagado_por: null
+        forma_pago: estadoForm === 'Pagado' ? formaPagoForm : null,
+        cuenta_id: estadoForm === 'Pagado' && formaPagoForm === 'Transferencia' ? cuentaIdForm : null,
+        pagado_por: null,
+        estado: estadoForm
       }
     }
 
@@ -155,6 +170,11 @@ export default function Gastos() {
     }
     setModal(null)
     cargar()
+  }
+
+  async function marcarComoPagado(g) {
+    abrirEditar(g)
+    setEstadoForm('Pagado')
   }
 
   async function confirmarBorrarGasto() {
@@ -170,10 +190,11 @@ export default function Gastos() {
         <p className="text-3xl md:text-4xl text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
           Romana Studio
         </p>
-        <nav className="flex gap-4">
+        <nav className="flex gap-4 flex-wrap">
           <a href="/" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Días y Horarios</a>
           <a href="/cobranza" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cobranza</a>
           <a href="/gastos" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Gastos</a>
+          <a href="/finanzas" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Finanzas</a>
           <a href="/alumnos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Alumnos</a>
         </nav>
       </div>
@@ -193,7 +214,7 @@ export default function Gastos() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div className="flex flex-col gap-3">
-          <p className="text-[11px] uppercase tracking-widest text-[#8A8378]">Por categoría</p>
+          <p className="text-[11px] uppercase tracking-widest text-[#8A8378]">Por categoría (pagado)</p>
           <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
             <p className="text-xs text-[#8A8378] mb-1">Total gastado</p>
             <p className="text-2xl font-semibold text-[#B5504A]">${totalGeneral.toLocaleString('es-AR')}</p>
@@ -215,10 +236,16 @@ export default function Gastos() {
         </div>
 
         <div className="flex flex-col gap-3">
-          <p className="text-[11px] uppercase tracking-widest text-[#8A8378]">De dónde salió</p>
-          <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
-            <p className="text-xs text-[#8A8378] mb-1">Efectivo</p>
-            <p className="text-2xl font-semibold text-[#221F1B]">${totalEfectivo.toLocaleString('es-AR')}</p>
+          <p className="text-[11px] uppercase tracking-widest text-[#8A8378]">De dónde salió (pagado) / Proyectado</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
+              <p className="text-xs text-[#8A8378] mb-1">Efectivo</p>
+              <p className="text-xl font-semibold text-[#221F1B]">${totalEfectivo.toLocaleString('es-AR')}</p>
+            </div>
+            <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
+              <p className="text-xs text-[#8A8378] mb-1">Aún no pagado</p>
+              <p className="text-xl font-semibold text-[#8A6B2C]">${totalProyectado.toLocaleString('es-AR')}</p>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {totalesPorCuenta.map(t => (
@@ -231,6 +258,14 @@ export default function Gastos() {
         </div>
       </div>
 
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {['todos', 'Pagado', 'Proyectado'].map(f => (
+          <button key={f} onClick={() => setFiltroEstado(f)} className={`px-4 py-1.5 rounded-full text-sm border ${filtroEstado === f ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15 hover:border-[#5C6F5D]'}`}>
+            {f === 'todos' ? 'Todos' : f === 'Pagado' ? `Pagados (${pagados.length})` : `Proyectados (${proyectados.length})`}
+          </button>
+        ))}
+      </div>
+
       {cargando ? (
         <p className="text-[#8A8378] text-sm">Cargando gastos…</p>
       ) : (
@@ -241,14 +276,15 @@ export default function Gastos() {
                 <th className="text-left px-4 py-3 text-sm font-semibold text-[#221F1B]">Fecha</th>
                 <th className="text-left px-4 py-3 text-sm font-semibold text-[#221F1B]">Concepto</th>
                 <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Categoría</th>
+                <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Estado</th>
                 <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Monto</th>
                 <th className="text-center px-4 py-3 text-sm font-semibold text-[#221F1B]">Salió de</th>
-                <th className="w-28"></th>
+                <th className="w-32"></th>
               </tr>
             </thead>
             <tbody>
-              {gastos.map(g => (
-                <tr key={g.id} className="border-b border-[#221F1B]/8 last:border-0 hover:bg-[#F5F1E9]">
+              {gastosFiltrados.map(g => (
+                <tr key={g.id} className={`border-b border-[#221F1B]/8 last:border-0 hover:bg-[#F5F1E9] ${g.estado === 'Proyectado' ? 'bg-[#FBF4E4]' : ''}`}>
                   <td className="px-4 py-3 text-sm text-[#221F1B]">{g.fecha}</td>
                   <td className="px-4 py-3 text-sm text-[#221F1B]">{g.concepto}</td>
                   <td className="px-4 py-3 text-center">
@@ -256,18 +292,26 @@ export default function Gastos() {
                       {esSueldo(g) ? 'Sueldo' : g.categoria}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${g.estado === 'Pagado' ? 'bg-[#5C6F5D] text-white' : 'border border-[#8A6B2C] text-[#8A6B2C]'}`}>
+                      {g.estado}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-sm text-center text-[#221F1B]">${Number(g.monto).toLocaleString('es-AR')}</td>
                   <td className="px-4 py-3 text-sm text-center text-[#221F1B]">
-                    {g.forma_pago === 'Transferencia' ? g.cuentas?.nombre || 'Transferencia' : (g.forma_pago || '—')}
+                    {g.estado === 'Proyectado' ? '—' : g.forma_pago === 'Transferencia' ? g.cuentas?.nombre || 'Transferencia' : (g.forma_pago || '—')}
                   </td>
                   <td className="px-4 py-3 text-center whitespace-nowrap">
+                    {g.estado === 'Proyectado' && (
+                      <button onClick={() => marcarComoPagado(g)} className="text-xs text-[#5C6F5D] hover:underline mr-3">Marcar pagado</button>
+                    )}
                     <button onClick={() => abrirEditar(g)} className="text-xs text-[#5C6F5D] hover:underline mr-3">Editar</button>
                     <button onClick={() => setConfirmarBorrar(g)} className="text-xs text-[#B5504A] hover:underline">Borrar</button>
                   </td>
                 </tr>
               ))}
-              {gastos.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-[#8A8378]">Sin gastos cargados este mes</td></tr>
+              {gastosFiltrados.length === 0 && (
+                <tr><td colSpan={7} className="px-4 py-6 text-center text-sm text-[#8A8378]">Sin gastos cargados este mes</td></tr>
               )}
             </tbody>
           </table>
@@ -289,6 +333,18 @@ export default function Gastos() {
                 </button>
               </div>
             )}
+
+            <label className="block text-xs text-[#8A8378] mb-1">Estado</label>
+            <div className="flex gap-2 mb-1">
+              {['Proyectado', 'Pagado'].map(e => (
+                <button key={e} onClick={() => setEstadoForm(e)} className={`px-4 py-1.5 rounded-full text-sm border ${estadoForm === e ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
+                  {e}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-[#8A8378] mb-3">
+              "Proyectado" = sabés que lo vas a pagar (ej. el alquiler antes de transferirlo) — no suma en la plata que ya salió, sí en la proyección del mes.
+            </p>
 
             <label className="block text-xs text-[#8A8378] mb-1">Fecha</label>
             <input type="date" value={fechaForm} onChange={e => setFechaForm(e.target.value)} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
@@ -345,25 +401,29 @@ export default function Gastos() {
               </>
             )}
 
-            <label className="block text-xs text-[#8A8378] mb-1">Forma de pago</label>
-            <div className="flex gap-2 mb-3">
-              {['Efectivo', 'Transferencia'].map(f => (
-                <button key={f} onClick={() => setFormaPagoForm(f)} className={`px-4 py-1.5 rounded-full text-sm border ${formaPagoForm === f ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
-                  {f}
-                </button>
-              ))}
-            </div>
-
-            {formaPagoForm === 'Transferencia' && (
+            {estadoForm === 'Pagado' && (
               <>
-                <label className="block text-xs text-[#8A8378] mb-1">Cuenta de origen</label>
-                <div className="flex gap-2 mb-4 flex-wrap">
-                  {cuentas.map(ct => (
-                    <button key={ct.id} onClick={() => setCuentaIdForm(ct.id)} className={`px-4 py-1.5 rounded-full text-sm border ${cuentaIdForm === ct.id ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
-                      {ct.nombre}
+                <label className="block text-xs text-[#8A8378] mb-1">Forma de pago</label>
+                <div className="flex gap-2 mb-3">
+                  {['Efectivo', 'Transferencia'].map(f => (
+                    <button key={f} onClick={() => setFormaPagoForm(f)} className={`px-4 py-1.5 rounded-full text-sm border ${formaPagoForm === f ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
+                      {f}
                     </button>
                   ))}
                 </div>
+
+                {formaPagoForm === 'Transferencia' && (
+                  <>
+                    <label className="block text-xs text-[#8A8378] mb-1">Cuenta de origen</label>
+                    <div className="flex gap-2 mb-4 flex-wrap">
+                      {cuentas.map(ct => (
+                        <button key={ct.id} onClick={() => setCuentaIdForm(ct.id)} className={`px-4 py-1.5 rounded-full text-sm border ${cuentaIdForm === ct.id ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
+                          {ct.nombre}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </>
             )}
 
