@@ -63,7 +63,7 @@ export default function Cobranza() {
     setCargando(false)
   }, [mes])
 
-  useEffect(() => { cargar() }, [mes])
+  useEffect(() => { cargar() }, [cargar])
 
   function cambiarMes(delta) {
     const [y, m] = mes.split('-').map(Number)
@@ -176,6 +176,7 @@ export default function Cobranza() {
           Romana Studio
         </p>
         <nav className="flex gap-4 flex-wrap">
+          <a href="/dashboard" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Dashboard</a>
           <a href="/" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Días y Horarios</a>
           <a href="/cobranza" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Cobranza</a>
           <a href="/gastos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Gastos</a>

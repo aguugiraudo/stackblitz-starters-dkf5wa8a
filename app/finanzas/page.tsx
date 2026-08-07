@@ -23,7 +23,6 @@ export default function Finanzas() {
     const finMes = new Date(y, m, 1)
     const finMesISO = `${finMes.getFullYear()}-${String(finMes.getMonth() + 1).padStart(2, '0')}-01`
 
-    // Ingresos del mes (misma lógica que Cobranza)
     const { data: insc } = await supabase
       .from('inscripciones')
       .select('alumno_id, alumnos(id, clases_semana, exento_pago)')
@@ -52,7 +51,6 @@ export default function Finanzas() {
     setIngresoProyectado(proy)
     setIngresoReal(real)
 
-    // Egresos del mes
     const { data: gastosMes } = await supabase
       .from('gastos').select('*')
       .gte('fecha', mes).lt('fecha', finMesISO)
@@ -61,7 +59,6 @@ export default function Finanzas() {
     setEgresoReal(egR)
     setEgresoProyectado(egP)
 
-    // Saldo por cuenta y caja de efectivo — SOLO del mes seleccionado (se retira todo a fin de mes)
     const { data: cuentas } = await supabase.from('cuentas').select('*').order('nombre')
 
     const saldos = (cuentas || []).map(ct => {
@@ -108,6 +105,7 @@ export default function Finanzas() {
           Romana Studio
         </p>
         <nav className="flex gap-4 flex-wrap">
+          <a href="/dashboard" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Dashboard</a>
           <a href="/" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Días y Horarios</a>
           <a href="/cobranza" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cobranza</a>
           <a href="/gastos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Gastos</a>

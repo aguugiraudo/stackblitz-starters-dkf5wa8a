@@ -208,7 +208,6 @@ export default function Grilla() {
     const W = 1080, H = 1920
     canvas.width = W; canvas.height = H
 
-    // ---- Fondo ----
     if (fondoImg) {
       const scale = Math.max(W / fondoImg.width, H / fondoImg.height)
       const w = fondoImg.width * scale, h = fondoImg.height * scale
@@ -220,7 +219,6 @@ export default function Grilla() {
       ctx.fillRect(0, 0, W, H)
     }
 
-    // ---- Tarjeta crema ----
     const cardX = 90, cardY = 320, cardW = W - 180
     let cardH = 620
     const filasDias = bloquesPlaca.length > 0 ? bloquesPlaca.length : 1
@@ -234,7 +232,6 @@ export default function Grilla() {
     ctx.fill()
     ctx.restore()
 
-    // ---- Badge circular con logo ----
     const badgeR = 130
     const badgeCx = W / 2, badgeCy = cardY
     ctx.save()
@@ -250,14 +247,12 @@ export default function Grilla() {
     }
     ctx.restore()
 
-    // ---- Título ----
     ctx.textAlign = 'center'
     ctx.fillStyle = '#3A2418'
     ctx.font = '700 50px sans-serif'
     ctx.fillText('ÚLTIMOS CUPOS', W / 2, cardY + badgeR + 100)
     ctx.fillText('DISPONIBLES', W / 2, cardY + badgeR + 160)
 
-    // ---- Días ----
     let y = cardY + badgeR + 260
     if (bloquesPlaca.length === 0) {
       ctx.font = '500 36px sans-serif'
@@ -274,7 +269,6 @@ export default function Grilla() {
       })
     }
 
-    // ---- Pie: dirección y teléfono ----
     ctx.font = '700 34px sans-serif'
     ctx.fillStyle = '#3A2418'
     ctx.fillText(direccionForm.toUpperCase(), W / 2, cardY + cardH - 90)
@@ -312,6 +306,7 @@ export default function Grilla() {
           Romana Studio
         </p>
         <nav className="flex gap-4 flex-wrap">
+          <a href="/dashboard" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Dashboard</a>
           <a href="/" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Días y Horarios</a>
           <a href="/cobranza" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cobranza</a>
           <a href="/gastos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Gastos</a>

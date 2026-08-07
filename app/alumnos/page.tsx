@@ -48,7 +48,7 @@ export default function Alumnos() {
     setSospechososVigentes(vigentes)
   }, [])
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar() }, [cargar])
 
   const cargarAnotadosEnMes = useCallback(async () => {
     const { data } = await supabase
@@ -146,6 +146,7 @@ export default function Alumnos() {
           Romana Studio
         </p>
         <nav className="flex gap-4 flex-wrap">
+          <a href="/dashboard" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Dashboard</a>
           <a href="/" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Días y Horarios</a>
           <a href="/cobranza" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cobranza</a>
           <a href="/gastos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Gastos</a>
