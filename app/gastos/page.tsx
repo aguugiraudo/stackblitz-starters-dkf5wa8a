@@ -55,7 +55,7 @@ export default function Gastos() {
     setCargando(false)
   }, [mes])
 
-  useEffect(() => { cargar() }, [mes])
+  useEffect(() => { cargar() }, [cargar])
 
   function cambiarMes(delta) {
     const [y, m] = mes.split('-').map(Number)
@@ -172,7 +172,7 @@ export default function Gastos() {
     cargar()
   }
 
-  async function marcarComoPagado(g) {
+  function marcarComoPagado(g) {
     abrirEditar(g)
     setEstadoForm('Pagado')
   }
@@ -183,6 +183,8 @@ export default function Gastos() {
     setConfirmarBorrar(null)
     cargar()
   }
+
+  const hayDatos = gastos.length > 0
 
   return (
     <div className="min-h-screen bg-[#ECE6DA] px-4 py-6 md:px-12 md:py-8">
@@ -212,51 +214,31 @@ export default function Gastos() {
 
       <p className="text-xs text-[#8A8378] uppercase tracking-widest mb-6">Gastos</p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="flex flex-col gap-3">
-          <p className="text-[11px] uppercase tracking-widest text-[#8A8378]">Por categoría (pagado)</p>
-          <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
-            <p className="text-xs text-[#8A8378] mb-1">Total gastado</p>
-            <p className="text-2xl font-semibold text-[#B5504A]">${totalGeneral.toLocaleString('es-AR')}</p>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-3 py-3">
-              <p className="text-xs text-[#8A8378] mb-1">Fijos</p>
-              <p className="text-base font-semibold text-[#221F1B]">${totalFijos.toLocaleString('es-AR')}</p>
-            </div>
-            <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-3 py-3">
-              <p className="text-xs text-[#8A8378] mb-1">Sueldos</p>
-              <p className="text-base font-semibold text-[#221F1B]">${totalSueldos.toLocaleString('es-AR')}</p>
-            </div>
-            <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-3 py-3">
-              <p className="text-xs text-[#8A8378] mb-1">Variables</p>
-              <p className="text-base font-semibold text-[#221F1B]">${totalVariablesResto.toLocaleString('es-AR')}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <p className="text-[11px] uppercase tracking-widest text-[#8A8378]">De dónde salió (pagado) / Proyectado</p>
-          <div className="grid grid-cols-2 gap-3">
+      {cargando ? (
+        <p className="text-[#8A8378] text-sm">Cargando gastos…</p>
+      ) : !hayDatos ? (
+        <p className="text-sm text-[#8A8378] mb-6">Todavía no hay gastos cargados en {labelMes}.</p>
+      ) : (
+        <div className="mb-6">
+          <div className="grid grid-cols-2 gap-3 mb-3 max-w-md">
             <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
-              <p className="text-xs text-[#8A8378] mb-1">Efectivo</p>
-              <p className="text-xl font-semibold text-[#221F1B]">${totalEfectivo.toLocaleString('es-AR')}</p>
+              <p className="text-xs text-[#8A8378] mb-1">Total gastado</p>
+              <p className="text-2xl font-semibold text-[#B5504A]">${totalGeneral.toLocaleString('es-AR')}</p>
             </div>
             <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-4 py-3">
               <p className="text-xs text-[#8A8378] mb-1">Aún no pagado</p>
-              <p className="text-xl font-semibold text-[#8A6B2C]">${totalProyectado.toLocaleString('es-AR')}</p>
+              <p className="text-2xl font-semibold text-[#8A6B2C]">${totalProyectado.toLocaleString('es-AR')}</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {totalesPorCuenta.map(t => (
-              <div key={t.nombre} className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-3 py-3">
-                <p className="text-xs text-[#8A8378] mb-1">{t.nombre}</p>
-                <p className="text-base font-semibold text-[#221F1B]">${t.total.toLocaleString('es-AR')}</p>
-              </div>
-            ))}
-          </div>
+          <p className="text-xs text-[#8A8378]">
+            Fijos ${totalFijos.toLocaleString('es-AR')} · Sueldos ${totalSueldos.toLocaleString('es-AR')} · Variables ${totalVariablesResto.toLocaleString('es-AR')}
+          </p>
+          <p className="text-xs text-[#8A8378]">
+            Efectivo ${totalEfectivo.toLocaleString('es-AR')}
+            {totalesPorCuenta.map(t => ` · ${t.nombre} $${t.total.toLocaleString('es-AR')}`)}
+          </p>
         </div>
-      </div>
+      )}
 
       <div className="flex gap-2 mb-4 flex-wrap">
         {['todos', 'Pagado', 'Proyectado'].map(f => (
@@ -266,9 +248,7 @@ export default function Gastos() {
         ))}
       </div>
 
-      {cargando ? (
-        <p className="text-[#8A8378] text-sm">Cargando gastos…</p>
-      ) : (
+      {cargando ? null : (
         <div className="bg-[#FBF9F5] rounded-2xl border border-[#221F1B]/8 overflow-hidden overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
@@ -343,7 +323,7 @@ export default function Gastos() {
               ))}
             </div>
             <p className="text-[11px] text-[#8A8378] mb-3">
-            &quot;Proyectado&quot; = sabés que lo vas a pagar (ej. el alquiler antes de transferirlo) — no suma en la plata que ya salió, sí en la proyección del mes.
+              &quot;Proyectado&quot; = sabés que lo vas a pagar (ej. el alquiler antes de transferirlo) — no suma en la plata que ya salió, sí en la proyección del mes.
             </p>
 
             <label className="block text-xs text-[#8A8378] mb-1">Fecha</label>
