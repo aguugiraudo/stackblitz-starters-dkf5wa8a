@@ -25,6 +25,10 @@ export default function Cobranza() {
   const [cuotasModal, setCuotasModal] = useState(false)
   const [cuotasEdit, setCuotasEdit] = useState({})
   const [filtro, setFiltro] = useState('todos')
+  const [mensajeModal, setMensajeModal] = useState(null)
+  const [cuentaMensajeId, setCuentaMensajeId] = useState(null)
+  const [tipoMensaje, setTipoMensaje] = useState('recordatorio')
+  const [copiado, setCopiado] = useState(false)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -59,6 +63,7 @@ export default function Cobranza() {
 
     const { data: ct } = await supabase.from('cuentas').select('*').order('nombre')
     setCuentas(ct || [])
+    if (ct && ct.length > 0 && !cuentaMensajeId) setCuentaMensajeId(ct[0].id)
 
     setCargando(false)
   }, [mes])
@@ -159,6 +164,36 @@ export default function Cobranza() {
     cargar()
   }
 
+  function abrirMensaje(alumno) {
+    setMensajeModal(alumno)
+    setTipoMensaje(estadoDe(alumno) === 'vencido' ? 'vencido' : 'recordatorio')
+    setCopiado(false)
+  }
+
+  function textoMensaje() {
+    if (!mensajeModal) return ''
+    const cuenta = cuentas.find(c => c.id === cuentaMensajeId)
+    const monto = cuotaEsperada(mensajeModal).toLocaleString('es-AR')
+    const datosPago = cuenta
+      ? `💳 Medios de pago:\nPodés abonar en efectivo en el estudio o por transferencia:\n- Alias: ${cuenta.alias || '—'}\n- Titular: ${cuenta.titular || '—'}\n- CUIL/CUIT: ${cuenta.cuil || '—'}\n- Entidad: ${cuenta.entidad || '—'}`
+      : ''
+
+    if (tipoMensaje === 'recordatorio') {
+      return `Hola ${mensajeModal.nombre}! Te recordamos que la cuota de ${labelMes} vence el día 10 para mantener tu cupo reservado 🧘‍♀️\n\nEl monto es $${monto}.\n\n${datosPago}\n\n¡Gracias!\nRomana Studio`
+    }
+    return `Hola ${mensajeModal.nombre}! Vimos que todavía no registramos el pago de la cuota de ${labelMes} (venció el día 10).\n\nEl monto es $${monto}.\n\n${datosPago}\n\nSi ya la abonaste avisanos para actualizarlo. ¡Gracias!\nRomana Studio`
+  }
+
+  async function copiarMensajeCobranza() {
+    try {
+      await navigator.clipboard.writeText(textoMensaje())
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 2000)
+    } catch {
+      alert('No se pudo copiar automáticamente, seleccioná el texto manualmente.')
+    }
+  }
+
   const chipEstado = {
     pagado: 'bg-[#5C6F5D] text-white',
     pendiente: 'bg-[#EDE7DD] text-[#8A6B2C]',
@@ -197,7 +232,7 @@ export default function Cobranza() {
       </div>
 
       <p className="text-xs text-[#8A8378] uppercase tracking-widest mb-1">Cobranza</p>
-      <p className="text-xs text-[#8A8378] mb-6">Vencimiento del mes: día 10</p>
+      <p className="text-xs text-[#8A8378] mb-6">Vencimiento del mes: día 10 · click en el estado de un alumno pendiente o vencido para copiar el mensaje de WhatsApp</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div className="flex flex-col gap-3">
@@ -263,6 +298,7 @@ export default function Cobranza() {
               {alumnosFiltrados.map(a => {
                 const c = cobranzaDe(a.id)
                 const estado = estadoDe(a)
+                const puedeMensaje = estado === 'pendiente' || estado === 'vencido'
                 return (
                   <tr key={a.id} className={`border-b border-[#221F1B]/8 last:border-0 hover:bg-[#F5F1E9] ${estado === 'vencido' ? 'bg-[#FBEAE8]' : ''}`}>
                     <td className="px-4 py-3 text-sm text-[#221F1B]">{a.nombre}</td>
@@ -274,9 +310,15 @@ export default function Cobranza() {
                       {c?.monto ? `$${Number(c.monto).toLocaleString('es-AR')}` : '—'}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${chipEstado[estado]}`}>
-                        {labelEstado[estado]}
-                      </span>
+                      {puedeMensaje ? (
+                        <button onClick={() => abrirMensaje(a)} className={`text-xs px-2 py-1 rounded-full font-medium ${chipEstado[estado]} hover:opacity-80`}>
+                          {labelEstado[estado]}
+                        </button>
+                      ) : (
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${chipEstado[estado]}`}>
+                          {labelEstado[estado]}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-center text-[#221F1B]">{c?.forma_pago || '—'}</td>
                     <td className="px-4 py-3 text-sm text-center text-[#221F1B]">{c?.cuentas?.nombre || '—'}</td>
@@ -370,6 +412,45 @@ export default function Cobranza() {
             <div className="flex gap-3 justify-end">
               <button onClick={() => setCuotasModal(false)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cancelar</button>
               <button onClick={guardarCuotas} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5C6F5D] hover:bg-[#4C5C4D]">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mensajeModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4 py-8" onClick={() => setMensajeModal(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-[#221F1B] mb-1">Mensaje para {mensajeModal.nombre}</p>
+            <p className="text-xs text-[#8A8378] mb-4">{labelMes}</p>
+
+            <label className="block text-xs text-[#8A8378] mb-1">Tipo de mensaje</label>
+            <div className="flex gap-2 mb-3">
+              <button onClick={() => setTipoMensaje('recordatorio')} className={`px-4 py-1.5 rounded-full text-sm border ${tipoMensaje === 'recordatorio' ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
+                Recordatorio
+              </button>
+              <button onClick={() => setTipoMensaje('vencido')} className={`px-4 py-1.5 rounded-full text-sm border ${tipoMensaje === 'vencido' ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
+                Vencido
+              </button>
+            </div>
+
+            <label className="block text-xs text-[#8A8378] mb-1">Cuenta a mostrar en el mensaje</label>
+            <div className="flex gap-2 mb-4 flex-wrap">
+              {cuentas.map(ct => (
+                <button key={ct.id} onClick={() => setCuentaMensajeId(ct.id)} className={`px-4 py-1.5 rounded-full text-sm border ${cuentaMensajeId === ct.id ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
+                  {ct.nombre}
+                </button>
+              ))}
+            </div>
+
+            <div className="bg-[#F5F1E9] rounded-lg p-4 mb-4 whitespace-pre-line text-sm text-[#221F1B] max-h-64 overflow-y-auto">
+              {textoMensaje()}
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setMensajeModal(null)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cerrar</button>
+              <button onClick={copiarMensajeCobranza} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5C6F5D] hover:bg-[#4C5C4D]">
+                {copiado ? '✓ Copiado' : 'Copiar mensaje'}
+              </button>
             </div>
           </div>
         </div>
