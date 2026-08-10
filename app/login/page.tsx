@@ -18,8 +18,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-[#ECE6DA] flex items-center justify-center px-4">
       <div className="bg-[#FBF9F5] rounded-2xl border border-[#221F1B]/8 p-8 w-full max-w-sm text-center">
-        <p className="text-3xl text-[#221F1B] mb-1" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>Romana Studio</p>
-        <p className="text-xs text-[#8A8378] uppercase tracking-widest mb-6">Ingresar</p>
+        <p className="text-3xl text-[#221F1B] mb-6" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>Romana Studio</p>
         <input
           type="password"
           value={clave}
