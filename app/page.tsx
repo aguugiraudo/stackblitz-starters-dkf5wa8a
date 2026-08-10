@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from './lib/supabase'
+import { getRol, cerrarSesion, ROLES } from './lib/auth'
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
 const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
@@ -26,9 +28,12 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 export default function Grilla() {
+  const router = useRouter()
+  const [rol, setRolState] = useState(null)
   const [horarios, setHorarios] = useState([])
   const [inscripciones, setInscripciones] = useState([])
   const [alumnosList, setAlumnosList] = useState([])
+  const [listaEspera, setListaEspera] = useState([])
   const [mes, setMes] = useState('2026-08-01')
   const [cargando, setCargando] = useState(true)
   const [modal, setModal] = useState(null)
@@ -45,7 +50,20 @@ export default function Grilla() {
   const [logoImg, setLogoImg] = useState(null)
   const [direccionForm, setDireccionForm] = useState('Falucho 9')
   const [telefonoForm, setTelefonoForm] = useState('3492-657457')
+  const [esperaModal, setEsperaModal] = useState(null)
+  const [nombreEsperaForm, setNombreEsperaForm] = useState('')
+  const [telefonoEsperaForm, setTelefonoEsperaForm] = useState('')
+  const [verEsperaModal, setVerEsperaModal] = useState(null)
+  const [esperaIdPendiente, setEsperaIdPendiente] = useState(null)
   const canvasRef = useRef(null)
+
+  useEffect(() => {
+    const r = getRol()
+    if (!r) { router.push('/login'); return }
+    setRolState(r)
+  }, [router])
+
+  const esProfe = rol === ROLES.PROFE
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -60,10 +78,14 @@ export default function Grilla() {
 
     const { data: a } = await supabase.from('alumnos').select('id, nombre').order('nombre')
     setAlumnosList(a || [])
+
+    const { data: le } = await supabase.from('lista_espera').select('*').eq('mes', mes).order('creado_en')
+    setListaEspera(le || [])
+
     setCargando(false)
   }, [mes])
 
-  useEffect(() => { cargar() }, [cargar])
+  useEffect(() => { if (rol) cargar() }, [cargar, rol])
 
   useEffect(() => {
     const img = new Image()
@@ -101,9 +123,14 @@ export default function Grilla() {
 
   function getSlot(dia, hora) { return horarios.find(h => h.dia === dia && h.hora === hora) }
   function inscriptosDe(slotId) { return inscripciones.filter(i => i.horario_clase_id === slotId) }
+  function esperaDe(slotId) { return listaEspera.filter(e => e.horario_clase_id === slotId) }
 
   async function asignar(slotId, alumnoId) {
     await supabase.from('inscripciones').insert({ alumno_id: alumnoId, horario_clase_id: slotId, mes, estado: 'activo' })
+    if (esperaIdPendiente) {
+      await supabase.from('lista_espera').delete().eq('id', esperaIdPendiente)
+      setEsperaIdPendiente(null)
+    }
     setModal(null); setBusqueda(''); cargar()
   }
 
@@ -153,6 +180,30 @@ export default function Grilla() {
     await supabase.from('inscripciones').update({ horario_clase_id: confirmarMover.destinoSlotId }).eq('id', confirmarMover.inscripcionId)
     setConfirmarMover(null)
     cargar()
+  }
+
+  async function agregarAEspera() {
+    if (!esperaModal || !nombreEsperaForm.trim()) return
+    await supabase.from('lista_espera').insert({
+      alumno_nombre: nombreEsperaForm.trim(),
+      telefono: telefonoEsperaForm.trim() || null,
+      horario_clase_id: esperaModal.slotId,
+      mes
+    })
+    setEsperaModal(null); setNombreEsperaForm(''); setTelefonoEsperaForm('')
+    cargar()
+  }
+
+  async function quitarDeEspera(id) {
+    await supabase.from('lista_espera').delete().eq('id', id)
+    cargar()
+  }
+
+  function anotarDesdeEspera(entry) {
+    setVerEsperaModal(null)
+    setEsperaIdPendiente(entry.id)
+    setBusqueda(entry.alumno_nombre)
+    setModal({ slotId: entry.horario_clase_id })
   }
 
   const alumnosFiltrados = alumnosList.filter(a => a.nombre.toLowerCase().includes(busqueda.toLowerCase()))
@@ -297,7 +348,14 @@ export default function Grilla() {
     link.click()
   }
 
+  function salir() {
+    cerrarSesion()
+    router.push('/login')
+  }
+
   const horariosDelDiaMovil = horasUnicas.filter(hora => getSlot(diaMovil, hora))
+
+  if (!rol) return null
 
   return (
     <div className="min-h-screen bg-[#ECE6DA] px-4 py-6 md:px-12 md:py-8">
@@ -305,14 +363,19 @@ export default function Grilla() {
         <p className="text-3xl md:text-4xl text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
           Romana Studio
         </p>
-        <nav className="flex gap-4 flex-wrap">
-          <a href="/dashboard" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Dashboard</a>
-          <a href="/" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Días y Horarios</a>
-          <a href="/cobranza" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cobranza</a>
-          <a href="/gastos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Gastos</a>
-          <a href="/finanzas" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Finanzas</a>
-          <a href="/alumnos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Alumnos</a>
-        </nav>
+        {esProfe ? (
+          <button onClick={salir} className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cerrar sesión</button>
+        ) : (
+          <nav className="flex gap-4 flex-wrap items-center">
+            <a href="/" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Días y Horarios</a>
+            <a href="/cobranza" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cobranza</a>
+            <a href="/gastos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Gastos</a>
+            <a href="/finanzas" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Finanzas</a>
+            <a href="/alumnos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Alumnos</a>
+            <a href="/dashboard" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Dashboard</a>
+            <button onClick={salir} className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cerrar sesión</button>
+          </nav>
+        )}
       </div>
 
       <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
@@ -321,19 +384,21 @@ export default function Grilla() {
           <span className="text-sm font-medium text-[#221F1B] min-w-[140px] text-center">{labelMes}</span>
           <button onClick={() => cambiarMes(1)} className="w-8 h-8 rounded-full bg-white border border-[#221F1B]/10 flex items-center justify-center text-[#221F1B] hover:bg-[#F5F1E9]">›</button>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <button onClick={() => setDispAbierta(true)} className="text-sm px-4 py-2 rounded-full bg-white border border-[#221F1B]/10 text-[#221F1B] hover:border-[#5C6F5D] hover:text-[#5C6F5D] flex items-center gap-2">
-            <span>🕧</span> Disponibilidad
-          </button>
-          <button onClick={() => setPlacaAbierta(true)} className="text-sm px-4 py-2 rounded-full bg-white border border-[#221F1B]/10 text-[#221F1B] hover:border-[#5C6F5D] hover:text-[#5C6F5D] flex items-center gap-2">
-            <span>📷</span> Placa Instagram
-          </button>
-        </div>
+        {!esProfe && (
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => setDispAbierta(true)} className="text-sm px-4 py-2 rounded-full bg-white border border-[#221F1B]/10 text-[#221F1B] hover:border-[#5C6F5D] hover:text-[#5C6F5D] flex items-center gap-2">
+              <span>🕧</span> Disponibilidad
+            </button>
+            <button onClick={() => setPlacaAbierta(true)} className="text-sm px-4 py-2 rounded-full bg-white border border-[#221F1B]/10 text-[#221F1B] hover:border-[#5C6F5D] hover:text-[#5C6F5D] flex items-center gap-2">
+              <span>📷</span> Placa Instagram
+            </button>
+          </div>
+        )}
       </div>
 
       <p className="text-xs text-[#8A8378] uppercase tracking-widest mb-5">Días y Horarios</p>
 
-      {mesVacio && (
+      {!esProfe && mesVacio && (
         <div className="mb-6">
           <button onClick={copiarMesAnterior} disabled={copiando} className="text-sm px-4 py-2 rounded-full bg-[#5C6F5D] text-white hover:bg-[#4C5C4D] disabled:opacity-60">
             {copiando ? 'Copiando…' : `Copiar inscripciones de ${labelMesPrevio}`}
@@ -366,21 +431,56 @@ export default function Grilla() {
                       if (!slot) return <td key={dia} className="px-3 py-2" />
                       const inscriptos = inscriptosDe(slot.id)
                       const libres = slot.cupos - inscriptos.length
+                      const espera = esperaDe(slot.id)
+
+                      if (esProfe) {
+                        return (
+                          <td key={dia} className="px-3 py-2 align-middle">
+                            <div className="flex flex-col gap-1.5 items-center">
+                              {inscriptos.map(i => (
+                                <span key={i.id} className="block w-full text-center rounded-full bg-[#5C6F5D] text-white text-xs px-3 py-1 truncate">
+                                  {i.alumnos?.nombre}
+                                </span>
+                              ))}
+                              {libres > 0 && (
+                                <span className="text-[11px] text-[#B7B9B1]">{libres} libre{libres > 1 ? 's' : ''}</span>
+                              )}
+                            </div>
+                          </td>
+                        )
+                      }
+
                       return (
-                        <td key={dia} className="px-3 py-2 align-middle" onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e, slot, dia, hora)}>
+                        <td
+                          key={dia}
+                          className="px-3 py-2 align-middle relative"
+                          onDragOver={e => e.preventDefault()}
+                          onDrop={e => onDrop(e, slot, dia, hora)}
+                          onClick={() => { if (libres <= 0) setEsperaModal({ slotId: slot.id }) }}
+                        >
+                          {espera.length > 0 && (
+                            <button
+                              onClick={ev => { ev.stopPropagation(); setVerEsperaModal({ slotId: slot.id, dia, hora }) }}
+                              className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-[#8A6B2C] text-white text-[10px] flex items-center justify-center font-medium"
+                              title="Ver lista de espera"
+                            >
+                              {espera.length}
+                            </button>
+                          )}
                           <div className="flex flex-col gap-1.5 items-center">
                             {inscriptos.map(i => (
                               <div key={i.id} className="group relative w-full">
                                 <span
                                   draggable
                                   onDragStart={e => onDragStartCapsula(e, i)}
+                                  onClick={e => e.stopPropagation()}
                                   className="cursor-grab active:cursor-grabbing block text-center rounded-full bg-[#5C6F5D] text-white text-xs px-3 py-1 truncate"
                                   title={i.alumnos?.nombre}
                                 >
                                   {i.alumnos?.nombre}
                                 </span>
                                 <button
-                                  onClick={() => setConfirmarBaja({ id: i.id, nombre: i.alumnos?.nombre })}
+                                  onClick={ev => { ev.stopPropagation(); setConfirmarBaja({ id: i.id, nombre: i.alumnos?.nombre }) }}
                                   className="hidden group-hover:flex absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#B5504A] text-white text-[10px] items-center justify-center"
                                   title="Quitar"
                                 >
@@ -389,10 +489,22 @@ export default function Grilla() {
                               </div>
                             ))}
                             {Array.from({ length: libres > 0 ? libres : 0 }).map((_, idx) => (
-                              <button key={idx} onClick={() => setModal({ slotId: slot.id })} className="w-full text-center rounded-full border border-dashed border-[#221F1B]/20 text-[#8A8378] text-xs px-3 py-1 hover:border-[#5C6F5D] hover:text-[#5C6F5D] transition-colors">
+                              <button
+                                key={idx}
+                                onClick={ev => { ev.stopPropagation(); setModal({ slotId: slot.id }) }}
+                                title={espera.length > 0 ? `${espera[0].alumno_nombre} está esperando este cupo — avisale` : undefined}
+                                className={`w-full text-center rounded-full border text-xs px-3 py-1 transition-colors ${
+                                  espera.length > 0
+                                    ? 'border-[#8A6B2C] text-[#8A6B2C] border-dashed'
+                                    : 'border-dashed border-[#221F1B]/20 text-[#8A8378] hover:border-[#5C6F5D] hover:text-[#5C6F5D]'
+                                }`}
+                              >
                                 + Libre
                               </button>
                             ))}
+                            {libres <= 0 && inscriptos.length > 0 && espera.length === 0 && (
+                              <span className="text-[10px] text-[#B7B9B1] mt-1">click para lista de espera</span>
+                            )}
                           </div>
                         </td>
                       )
@@ -421,20 +533,32 @@ export default function Grilla() {
                 if (!slot) return null
                 const inscriptos = inscriptosDe(slot.id)
                 const libres = slot.cupos - inscriptos.length
+                const espera = esperaDe(slot.id)
                 return (
                   <div key={hora} className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 p-3">
-                    <p className="font-mono text-base font-bold text-[#221F1B] mb-2">{formatHoraCompleta(hora)}</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-mono text-base font-bold text-[#221F1B]">{formatHoraCompleta(hora)}</p>
+                      {!esProfe && espera.length > 0 && (
+                        <button onClick={() => setVerEsperaModal({ slotId: slot.id, dia: diaMovil, hora })} className="text-xs px-2 py-1 rounded-full bg-[#8A6B2C] text-white">
+                          {espera.length} esperando
+                        </button>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-1.5">
                       {inscriptos.map(i => (
-                        <button
-                          key={i.id}
-                          onClick={() => setConfirmarBaja({ id: i.id, nombre: i.alumnos?.nombre })}
-                          className="rounded-full bg-[#5C6F5D] text-white text-xs px-3 py-1"
-                        >
-                          {i.alumnos?.nombre}
-                        </button>
+                        esProfe ? (
+                          <span key={i.id} className="rounded-full bg-[#5C6F5D] text-white text-xs px-3 py-1">{i.alumnos?.nombre}</span>
+                        ) : (
+                          <button
+                            key={i.id}
+                            onClick={() => setConfirmarBaja({ id: i.id, nombre: i.alumnos?.nombre })}
+                            className="rounded-full bg-[#5C6F5D] text-white text-xs px-3 py-1"
+                          >
+                            {i.alumnos?.nombre}
+                          </button>
+                        )
                       ))}
-                      {Array.from({ length: libres > 0 ? libres : 0 }).map((_, idx) => (
+                      {!esProfe && Array.from({ length: libres > 0 ? libres : 0 }).map((_, idx) => (
                         <button
                           key={idx}
                           onClick={() => setModal({ slotId: slot.id })}
@@ -443,6 +567,14 @@ export default function Grilla() {
                           + Libre
                         </button>
                       ))}
+                      {esProfe && libres > 0 && (
+                        <span className="text-[11px] text-[#B7B9B1]">{libres} libre{libres > 1 ? 's' : ''}</span>
+                      )}
+                      {!esProfe && libres <= 0 && (
+                        <button onClick={() => setEsperaModal({ slotId: slot.id })} className="rounded-full border border-dashed border-[#8A6B2C] text-[#8A6B2C] text-xs px-3 py-1">
+                          + Lista de espera
+                        </button>
+                      )}
                     </div>
                   </div>
                 )
@@ -453,7 +585,7 @@ export default function Grilla() {
       )}
 
       {modal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4" onClick={() => setModal(null)}>
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4" onClick={() => { setModal(null); setEsperaIdPendiente(null) }}>
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-medium text-[#221F1B] mb-3">Anotar alumno</p>
             <input autoFocus value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar o escribir nombre nuevo…" className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
@@ -561,6 +693,49 @@ export default function Grilla() {
               <button onClick={descargarPlaca} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5C6F5D] hover:bg-[#4C5C4D]">
                 Descargar imagen
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {esperaModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4" onClick={() => setEsperaModal(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-[#221F1B] mb-1">Agregar a lista de espera</p>
+            <p className="text-xs text-[#8A8378] mb-4">Este horario está completo — te avisamos acá cuando se libere una cama</p>
+            <label className="block text-xs text-[#8A8378] mb-1">Nombre</label>
+            <input autoFocus value={nombreEsperaForm} onChange={e => setNombreEsperaForm(e.target.value)} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
+            <label className="block text-xs text-[#8A8378] mb-1">Teléfono (opcional)</label>
+            <input value={telefonoEsperaForm} onChange={e => setTelefonoEsperaForm(e.target.value)} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-5 outline-none focus:border-[#5C6F5D]" />
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setEsperaModal(null)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cancelar</button>
+              <button onClick={agregarAEspera} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#8A6B2C] hover:bg-[#755A24]">Agregar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {verEsperaModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4" onClick={() => setVerEsperaModal(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-[#221F1B] mb-1">Lista de espera</p>
+            <p className="text-xs text-[#8A8378] mb-4">{verEsperaModal.dia} {formatHoraCompleta(verEsperaModal.hora)}</p>
+            <div className="flex flex-col gap-2 mb-4">
+              {esperaDe(verEsperaModal.slotId).map(e => (
+                <div key={e.id} className="flex items-center justify-between bg-[#F5F1E9] rounded-lg px-3 py-2">
+                  <div>
+                    <p className="text-sm text-[#221F1B]">{e.alumno_nombre}</p>
+                    {e.telefono && <p className="text-xs text-[#8A8378]">{e.telefono}</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => anotarDesdeEspera(e)} className="text-xs text-[#5C6F5D] hover:underline">Anotar</button>
+                    <button onClick={() => quitarDeEspera(e.id)} className="text-xs text-[#B5504A] hover:underline">Quitar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => setVerEsperaModal(null)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cerrar</button>
             </div>
           </div>
         </div>
