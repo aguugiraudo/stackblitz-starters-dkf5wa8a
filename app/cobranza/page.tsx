@@ -29,6 +29,9 @@ export default function Cobranza() {
   const [cuentaMensajeId, setCuentaMensajeId] = useState(null)
   const [tipoMensaje, setTipoMensaje] = useState('recordatorio')
   const [copiado, setCopiado] = useState(false)
+  const [viendo, setViendo] = useState(null)
+  const [inscripcionesDetalle, setInscripcionesDetalle] = useState([])
+  const [confirmarBaja, setConfirmarBaja] = useState(null)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -129,6 +132,10 @@ export default function Cobranza() {
   async function guardarPago() {
     if (!pagoModal) return
     const montoPagado = parseFloat(montoForm) || 0
+    if (montoPagado > 0 && formaForm === 'Transferencia' && !cuentaForm) {
+      alert('Elegí a qué cuenta corresponde la transferencia antes de guardar')
+      return
+    }
     const payload = {
       alumno_id: pagoModal.alumno.id,
       mes,
@@ -194,6 +201,25 @@ export default function Cobranza() {
     }
   }
 
+  async function abrirDetalle(alumno) {
+    setViendo(alumno)
+    const { data } = await supabase
+      .from('inscripciones')
+      .select('*, horarios_clase(dia, hora)')
+      .eq('alumno_id', alumno.id)
+      .eq('mes', mes)
+      .eq('estado', 'activo')
+    setInscripcionesDetalle(data || [])
+  }
+
+  async function confirmarBajaAhora() {
+    if (!confirmarBaja) return
+    await supabase.from('inscripciones').update({ estado: 'baja' }).eq('alumno_id', confirmarBaja.id).eq('mes', mes).eq('estado', 'activo')
+    setConfirmarBaja(null)
+    setViendo(null)
+    cargar()
+  }
+
   const chipEstado = {
     pagado: 'bg-[#5C6F5D] text-white',
     pendiente: 'bg-[#EDE7DD] text-[#8A6B2C]',
@@ -211,12 +237,12 @@ export default function Cobranza() {
           Romana Studio
         </p>
         <nav className="flex gap-4 flex-wrap">
-          <a href="/dashboard" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Dashboard</a>
           <a href="/" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Días y Horarios</a>
           <a href="/cobranza" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Cobranza</a>
           <a href="/gastos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Gastos</a>
           <a href="/finanzas" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Finanzas</a>
           <a href="/alumnos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Alumnos</a>
+          <a href="/dashboard" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Dashboard</a>
         </nav>
       </div>
 
@@ -232,7 +258,7 @@ export default function Cobranza() {
       </div>
 
       <p className="text-xs text-[#8A8378] uppercase tracking-widest mb-1">Cobranza</p>
-      <p className="text-xs text-[#8A8378] mb-6">Vencimiento del mes: día 10 · click en el estado de un alumno pendiente o vencido para copiar el mensaje de WhatsApp</p>
+      <p className="text-xs text-[#8A8378] mb-6">Vencimiento del mes: día 10 · click en el nombre para ver horarios o dar de baja · click en el estado para copiar mensaje de WhatsApp</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div className="flex flex-col gap-3">
@@ -301,7 +327,11 @@ export default function Cobranza() {
                 const puedeMensaje = estado === 'pendiente' || estado === 'vencido'
                 return (
                   <tr key={a.id} className={`border-b border-[#221F1B]/8 last:border-0 hover:bg-[#F5F1E9] ${estado === 'vencido' ? 'bg-[#FBEAE8]' : ''}`}>
-                    <td className="px-4 py-3 text-sm text-[#221F1B]">{a.nombre}</td>
+                    <td className="px-4 py-3 text-sm">
+                      <button onClick={() => abrirDetalle(a)} className="text-[#221F1B] hover:text-[#5C6F5D] hover:underline text-left">
+                        {a.nombre}
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-sm text-center text-[#221F1B]">{a.clasesReales}</td>
                     <td className="px-4 py-3 text-sm text-center text-[#221F1B]">
                       {a.exento_pago ? '—' : `$${cuotaEsperada(a).toLocaleString('es-AR')}`}
@@ -340,6 +370,45 @@ export default function Cobranza() {
         </div>
       )}
 
+      {viendo && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4" onClick={() => setViendo(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-[#221F1B] mb-1">{viendo.nombre}</p>
+            <p className="text-xs text-[#8A8378] mb-4">{labelMes} · {viendo.clasesReales} clases/semana</p>
+            <p className="text-xs font-medium text-[#8A8378] uppercase tracking-wide mb-2">Horarios en {labelMes}</p>
+            <div className="flex flex-col gap-1.5 mb-5">
+              {inscripcionesDetalle.length > 0 ? inscripcionesDetalle.map(i => (
+                <div key={i.id} className="text-sm text-[#221F1B] bg-[#F5F1E9] rounded-lg px-3 py-2">
+                  {i.horarios_clase?.dia} — {i.horarios_clase?.hora?.slice(0, 5)}
+                </div>
+              )) : (
+                <p className="text-sm text-[#8A8378]">Sin horarios anotados este mes</p>
+              )}
+            </div>
+            <div className="flex justify-between items-center">
+              <button onClick={() => setConfirmarBaja(viendo)} className="text-xs text-[#B5504A] hover:underline">
+                Dar de baja este mes
+              </button>
+              <button onClick={() => setViendo(null)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmarBaja && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4" onClick={() => setConfirmarBaja(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}>
+            <p className="text-sm text-[#221F1B] mb-6">
+              ¿Seguro que querés dar de baja a <span className="font-semibold">{confirmarBaja.nombre}</span> de todos sus horarios de {labelMes}? Va a desaparecer de la grilla de Días y Horarios este mes.
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button onClick={() => setConfirmarBaja(null)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cancelar</button>
+              <button onClick={confirmarBajaAhora} className="px-4 py-2 rounded-full text-sm font-medium text-white bg-[#B5504A] hover:bg-[#9C4340]">Dar de baja</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pagoModal && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4" onClick={() => setPagoModal(null)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
@@ -364,18 +433,19 @@ export default function Cobranza() {
 
             {formaForm === 'Transferencia' && (
               <>
-                <label className="block text-xs text-[#8A8378] mb-1">Cuenta destino</label>
-                <div className="flex gap-2 mb-3 flex-wrap">
+                <label className="block text-xs text-[#8A8378] mb-1">Cuenta destino <span className="text-[#B5504A]">*</span></label>
+                <div className="flex gap-2 mb-1 flex-wrap">
                   {cuentas.map(ct => (
                     <button key={ct.id} onClick={() => setCuentaForm(ct.id)} className={`px-4 py-1.5 rounded-full text-sm border ${cuentaForm === ct.id ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
                       {ct.nombre}
                     </button>
                   ))}
                 </div>
+                {!cuentaForm && <p className="text-[11px] text-[#B5504A] mb-3">Obligatorio para transferencias</p>}
               </>
             )}
 
-            <label className="block text-xs text-[#8A8378] mb-1">Día de pago</label>
+            <label className="block text-xs text-[#8A8378] mb-1 mt-3">Día de pago</label>
             <input type="date" value={diaPagoForm} onChange={e => setDiaPagoForm(e.target.value)} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-5 outline-none focus:border-[#5C6F5D]" />
 
             <div className="flex gap-3 justify-between items-center">

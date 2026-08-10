@@ -20,6 +20,7 @@ export default function Dashboard() {
   const [cargando, setCargando] = useState(true)
   const [alumnosActivos, setAlumnosActivos] = useState(0)
   const [alumnosNuevos, setAlumnosNuevos] = useState(0)
+  const [alumnosBajas, setAlumnosBajas] = useState(0)
   const [ocupacion, setOcupacion] = useState(0)
   const [ingresoProyectado, setIngresoProyectado] = useState(0)
   const [ingresoReal, setIngresoReal] = useState(0)
@@ -34,7 +35,6 @@ export default function Dashboard() {
     const finMesISO = `${finMes.getFullYear()}-${String(finMes.getMonth() + 1).padStart(2, '0')}-01`
     const mesPrevio = mesAnterior(mes)
 
-    // Alumnos activos este mes y mes anterior (para calcular nuevos)
     const { data: inscMes } = await supabase
       .from('inscripciones')
       .select('alumno_id, alumnos(id, clases_semana, exento_pago)')
@@ -47,14 +47,13 @@ export default function Dashboard() {
     const idsPrevio = new Set((inscPrevio || []).map(i => i.alumno_id))
     setAlumnosActivos(idsMes.size)
     setAlumnosNuevos([...idsMes].filter(id => !idsPrevio.has(id)).length)
+    setAlumnosBajas([...idsPrevio].filter(id => !idsMes.has(id)).length)
 
-    // Ocupación de la grilla
     const { data: horarios } = await supabase.from('horarios_clase').select('cupos').eq('activo', true)
     const cuposTotales = (horarios || []).reduce((acc, h) => acc + h.cupos, 0)
     const ocupadas = (inscMes || []).length
     setOcupacion(cuposTotales > 0 ? Math.round((ocupadas / cuposTotales) * 100) : 0)
 
-    // Ingresos proyectado/real
     const { data: cv } = await supabase.from('cuotas_valores').select('*').order('vigente_desde', { ascending: false })
     const cuotaBase = {}
     ;(cv || []).forEach(v => { if (!(v.clases_semana in cuotaBase)) cuotaBase[v.clases_semana] = v.valor })
@@ -79,7 +78,6 @@ export default function Dashboard() {
     const real = (cobMes || []).reduce((acc, c) => acc + (Number(c.monto) || 0), 0)
     setIngresoReal(real)
 
-    // Vencidos (pasó el día 10, no exento, sin pago > 0)
     const fechaVencimiento = `${mes.slice(0, 8)}10`
     let vencidosCount = 0
     if (hoyISO() > fechaVencimiento) {
@@ -92,7 +90,6 @@ export default function Dashboard() {
     }
     setVencidos(vencidosCount)
 
-    // Egresos y gastos proyectados sin pagar
     const { data: gastosMes } = await supabase
       .from('gastos').select('*')
       .gte('fecha', mes).lt('fecha', finMesISO)
@@ -114,6 +111,8 @@ export default function Dashboard() {
 
   const resultadoMes = ingresoReal - egresoReal
   const hayAlertas = vencidos > 0 || gastosSinPagar > 0
+  const netoAlumnos = alumnosNuevos - alumnosBajas
+  const porcentajeCobrado = ingresoProyectado > 0 ? Math.round((ingresoReal / ingresoProyectado) * 100) : 0
 
   return (
     <div className="min-h-screen bg-[#ECE6DA] px-4 py-6 md:px-12 md:py-8">
@@ -122,12 +121,12 @@ export default function Dashboard() {
           Romana Studio
         </p>
         <nav className="flex gap-4 flex-wrap">
-          <a href="/dashboard" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Dashboard</a>
           <a href="/" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Días y Horarios</a>
           <a href="/cobranza" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cobranza</a>
           <a href="/gastos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Gastos</a>
           <a href="/finanzas" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Finanzas</a>
           <a href="/alumnos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Alumnos</a>
+          <a href="/dashboard" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Dashboard</a>
         </nav>
       </div>
 
@@ -162,7 +161,11 @@ export default function Dashboard() {
             <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-5 py-4">
               <p className="text-xs text-[#8A8378] mb-1">Alumnos activos</p>
               <p className="text-3xl font-semibold text-[#221F1B]">{alumnosActivos}</p>
-              {alumnosNuevos > 0 && <p className="text-xs text-[#5C6F5D] mt-1">+{alumnosNuevos} nuevos este mes</p>}
+              <p className="text-xs text-[#8A8378] mt-1">
+                {netoAlumnos > 0 ? '+' : ''}{netoAlumnos} vs mes anterior
+              </p>
+              <p className="text-xs text-[#5C6F5D]">+{alumnosNuevos} nuevos</p>
+              <p className="text-xs text-[#B5504A]">-{alumnosBajas} bajas</p>
             </div>
             <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-5 py-4">
               <p className="text-xs text-[#8A8378] mb-1">Ocupación de la grilla</p>
@@ -172,6 +175,7 @@ export default function Dashboard() {
               <p className="text-xs text-[#8A8378] mb-1">Cobrado / Proyectado</p>
               <p className="text-2xl font-semibold text-[#5C6F5D]">${ingresoReal.toLocaleString('es-AR')}</p>
               <p className="text-xs text-[#8A8378] mt-1">de ${ingresoProyectado.toLocaleString('es-AR')}</p>
+              <p className="text-xs text-[#8A8378]">{porcentajeCobrado}% cobrado</p>
             </div>
             <div className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 px-5 py-4">
               <p className="text-xs text-[#8A8378] mb-1">Resultado del mes</p>
