@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabase'
+import { getRol, cerrarSesion, ROLES } from '../lib/auth'
 
 const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
@@ -12,6 +14,8 @@ function hoyISO() {
 function esSueldo(g) { return (g.concepto || '').startsWith('Sueldo ') }
 
 export default function Gastos() {
+  const router = useRouter()
+  const [rol, setRolState] = useState(null)
   const [mes, setMes] = useState('2026-08-01')
   const [cargando, setCargando] = useState(true)
   const [gastos, setGastos] = useState([])
@@ -34,6 +38,13 @@ export default function Gastos() {
   const [confirmarBorrar, setConfirmarBorrar] = useState(null)
   const [filtroEstado, setFiltroEstado] = useState('todos')
 
+  useEffect(() => {
+    const r = getRol()
+    if (!r) { router.push('/login'); return }
+    if (r !== ROLES.ADMIN) { router.push('/'); return }
+    setRolState(r)
+  }, [router])
+
   const cargar = useCallback(async () => {
     setCargando(true)
     const [y, m] = mes.split('-').map(Number)
@@ -55,7 +66,7 @@ export default function Gastos() {
     setCargando(false)
   }, [mes])
 
-  useEffect(() => { cargar() }, [cargar])
+  useEffect(() => { if (rol) cargar() }, [cargar, rol])
 
   function cambiarMes(delta) {
     const [y, m] = mes.split('-').map(Number)
@@ -184,7 +195,14 @@ export default function Gastos() {
     cargar()
   }
 
+  function salir() {
+    cerrarSesion()
+    router.push('/login')
+  }
+
   const hayDatos = gastos.length > 0
+
+  if (!rol) return null
 
   return (
     <div className="min-h-screen bg-[#ECE6DA] px-4 py-6 md:px-12 md:py-8">
@@ -192,13 +210,14 @@ export default function Gastos() {
         <p className="text-3xl md:text-4xl text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
           Romana Studio
         </p>
-        <nav className="flex gap-4 flex-wrap">
-          <a href="/dashboard" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Dashboard</a>
+        <nav className="flex gap-4 flex-wrap items-center">
           <a href="/" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Días y Horarios</a>
           <a href="/cobranza" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cobranza</a>
           <a href="/gastos" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Gastos</a>
           <a href="/finanzas" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Finanzas</a>
           <a href="/alumnos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Alumnos</a>
+          <a href="/dashboard" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Dashboard</a>
+          <button onClick={salir} className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cerrar sesión</button>
         </nav>
       </div>
 

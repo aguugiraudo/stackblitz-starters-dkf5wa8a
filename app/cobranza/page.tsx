@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabase'
+import { getRol, cerrarSesion, ROLES } from '../lib/auth'
 
 const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
@@ -10,6 +12,8 @@ function hoyISO() {
 }
 
 export default function Cobranza() {
+  const router = useRouter()
+  const [rol, setRolState] = useState(null)
   const [mes, setMes] = useState('2026-08-01')
   const [cargando, setCargando] = useState(true)
   const [alumnosDelMes, setAlumnosDelMes] = useState([])
@@ -32,6 +36,13 @@ export default function Cobranza() {
   const [viendo, setViendo] = useState(null)
   const [inscripcionesDetalle, setInscripcionesDetalle] = useState([])
   const [confirmarBaja, setConfirmarBaja] = useState(null)
+
+  useEffect(() => {
+    const r = getRol()
+    if (!r) { router.push('/login'); return }
+    if (r !== ROLES.ADMIN) { router.push('/'); return }
+    setRolState(r)
+  }, [router])
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -71,7 +82,7 @@ export default function Cobranza() {
     setCargando(false)
   }, [mes])
 
-  useEffect(() => { cargar() }, [cargar])
+  useEffect(() => { if (rol) cargar() }, [cargar, rol])
 
   function cambiarMes(delta) {
     const [y, m] = mes.split('-').map(Number)
@@ -220,6 +231,11 @@ export default function Cobranza() {
     cargar()
   }
 
+  function salir() {
+    cerrarSesion()
+    router.push('/login')
+  }
+
   const chipEstado = {
     pagado: 'bg-[#5C6F5D] text-white',
     pendiente: 'bg-[#EDE7DD] text-[#8A6B2C]',
@@ -230,19 +246,22 @@ export default function Cobranza() {
   const contadorFiltro = { pagado: 0, pendiente: 0, vencido: 0, exento: 0 }
   alumnosDelMes.forEach(a => { contadorFiltro[estadoDe(a)] = (contadorFiltro[estadoDe(a)] || 0) + 1 })
 
+  if (!rol) return null
+
   return (
     <div className="min-h-screen bg-[#ECE6DA] px-4 py-6 md:px-12 md:py-8">
       <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
         <p className="text-3xl md:text-4xl text-[#221F1B] tracking-wide" style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>
           Romana Studio
         </p>
-        <nav className="flex gap-4 flex-wrap">
+        <nav className="flex gap-4 flex-wrap items-center">
           <a href="/" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Días y Horarios</a>
           <a href="/cobranza" className="text-sm font-medium text-[#5C6F5D] border-b-2 border-[#5C6F5D] pb-0.5">Cobranza</a>
           <a href="/gastos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Gastos</a>
           <a href="/finanzas" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Finanzas</a>
           <a href="/alumnos" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Alumnos</a>
           <a href="/dashboard" className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Dashboard</a>
+          <button onClick={salir} className="text-sm font-medium text-[#8A8378] hover:text-[#221F1B]">Cerrar sesión</button>
         </nav>
       </div>
 
