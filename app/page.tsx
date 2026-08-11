@@ -502,9 +502,6 @@ export default function Grilla() {
                                 + Libre
                               </button>
                             ))}
-                            {libres <= 0 && inscriptos.length > 0 && espera.length === 0 && (
-                              <span className="text-[10px] text-[#B7B9B1] mt-1">click para lista de espera</span>
-                            )}
                           </div>
                         </td>
                       )
