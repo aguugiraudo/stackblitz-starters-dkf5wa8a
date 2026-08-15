@@ -27,6 +27,18 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath()
 }
 
+async function sincronizarEstadoAlumno(alumnoId) {
+  const hoy = new Date()
+  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+  const { count } = await supabase
+    .from('inscripciones')
+    .select('id', { count: 'exact', head: true })
+    .eq('alumno_id', alumnoId)
+    .eq('mes', mesActual)
+    .eq('estado', 'activo')
+  await supabase.from('alumnos').update({ estado: count > 0 ? 'activo' : 'baja' }).eq('id', alumnoId)
+}
+
 export default function Grilla() {
   const router = useRouter()
   const [rol, setRolState] = useState(null)
@@ -114,6 +126,8 @@ export default function Grilla() {
     if (prev && prev.length > 0) {
       const nuevas = prev.map(p => ({ alumno_id: p.alumno_id, horario_clase_id: p.horario_clase_id, mes, estado: 'activo' }))
       await supabase.from('inscripciones').insert(nuevas)
+      const idsUnicos = [...new Set(prev.map(p => p.alumno_id))]
+      for (const id of idsUnicos) { await sincronizarEstadoAlumno(id) }
     }
     setCopiando(false)
     cargar()
@@ -127,6 +141,7 @@ export default function Grilla() {
 
   async function asignar(slotId, alumnoId) {
     await supabase.from('inscripciones').insert({ alumno_id: alumnoId, horario_clase_id: slotId, mes, estado: 'activo' })
+    await sincronizarEstadoAlumno(alumnoId)
     if (esperaIdPendiente) {
       await supabase.from('lista_espera').delete().eq('id', esperaIdPendiente)
       setEsperaIdPendiente(null)
@@ -146,6 +161,7 @@ export default function Grilla() {
   async function confirmarQuitar() {
     if (!confirmarBaja) return
     await supabase.from('inscripciones').update({ estado: 'baja' }).eq('id', confirmarBaja.id)
+    if (confirmarBaja.alumnoId) await sincronizarEstadoAlumno(confirmarBaja.alumnoId)
     setConfirmarBaja(null)
     cargar()
   }
@@ -480,7 +496,7 @@ export default function Grilla() {
                                   {i.alumnos?.nombre}
                                 </span>
                                 <button
-                                  onClick={ev => { ev.stopPropagation(); setConfirmarBaja({ id: i.id, nombre: i.alumnos?.nombre }) }}
+                                  onClick={ev => { ev.stopPropagation(); setConfirmarBaja({ id: i.id, nombre: i.alumnos?.nombre, alumnoId: i.alumno_id }) }}
                                   className="hidden group-hover:flex absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#B5504A] text-white text-[10px] items-center justify-center"
                                   title="Quitar"
                                 >
@@ -548,7 +564,7 @@ export default function Grilla() {
                         ) : (
                           <button
                             key={i.id}
-                            onClick={() => setConfirmarBaja({ id: i.id, nombre: i.alumnos?.nombre })}
+                            onClick={() => setConfirmarBaja({ id: i.id, nombre: i.alumnos?.nombre, alumnoId: i.alumno_id })}
                             className="rounded-full bg-[#5C6F5D] text-white text-xs px-3 py-1"
                           >
                             {i.alumnos?.nombre}

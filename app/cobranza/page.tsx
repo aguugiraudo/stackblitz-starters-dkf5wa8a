@@ -11,6 +11,18 @@ function hoyISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+async function sincronizarEstadoAlumno(alumnoId) {
+  const hoy = new Date()
+  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+  const { count } = await supabase
+    .from('inscripciones')
+    .select('id', { count: 'exact', head: true })
+    .eq('alumno_id', alumnoId)
+    .eq('mes', mesActual)
+    .eq('estado', 'activo')
+  await supabase.from('alumnos').update({ estado: count > 0 ? 'activo' : 'baja' }).eq('id', alumnoId)
+}
+
 export default function Cobranza() {
   const router = useRouter()
   const [rol, setRolState] = useState(null)
@@ -226,6 +238,7 @@ export default function Cobranza() {
   async function confirmarBajaAhora() {
     if (!confirmarBaja) return
     await supabase.from('inscripciones').update({ estado: 'baja' }).eq('alumno_id', confirmarBaja.id).eq('mes', mes).eq('estado', 'activo')
+    await sincronizarEstadoAlumno(confirmarBaja.id)
     setConfirmarBaja(null)
     setViendo(null)
     cargar()
