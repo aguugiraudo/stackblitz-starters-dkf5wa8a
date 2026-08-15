@@ -15,10 +15,16 @@ const SOSPECHOSOS = [
   ['SOLANA', 'SOLANA BURKET'],
 ]
 
+function mesActualISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
 export default function Alumnos() {
   const router = useRouter()
   const [rol, setRolState] = useState(null)
   const [alumnos, setAlumnos] = useState([])
+  const [idsActivosHoy, setIdsActivosHoy] = useState(new Set())
   const [cargando, setCargando] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState('activo')
@@ -48,6 +54,13 @@ export default function Alumnos() {
     setCargando(true)
     const { data } = await supabase.from('alumnos').select('*').order('nombre')
     setAlumnos(data || [])
+
+    const mesHoy = mesActualISO()
+    const { data: inscHoy } = await supabase
+      .from('inscripciones').select('alumno_id')
+      .eq('mes', mesHoy).eq('estado', 'activo')
+    setIdsActivosHoy(new Set((inscHoy || []).map(i => i.alumno_id)))
+
     setCargando(false)
 
     const vigentes = []
@@ -82,10 +95,11 @@ export default function Alumnos() {
   const labelMesStats = `${NOMBRES_MES[mesNumStats - 1]} ${anioStats}`
 
   const totalHistorico = alumnos.length
-  const totalActivos = alumnos.filter(a => a.estado === 'activo').length
+  const totalActivos = idsActivosHoy.size
 
   const filtrados = alumnos.filter(a => {
-    if (filtro !== 'todos' && a.estado !== filtro) return false
+    if (filtro === 'activo' && !idsActivosHoy.has(a.id)) return false
+    if (filtro === 'baja' && idsActivosHoy.has(a.id)) return false
     return a.nombre.toLowerCase().includes(busqueda.toLowerCase())
   })
 
@@ -93,7 +107,6 @@ export default function Alumnos() {
     if (!editando) return
     await supabase.from('alumnos').update({
       nombre: editando.nombre,
-      estado: editando.estado,
       exento_pago: editando.exento_pago
     }).eq('id', editando.id)
     setEditando(null)
@@ -257,8 +270,8 @@ export default function Alumnos() {
                   </td>
                   <td className="px-4 py-3 text-sm text-center text-[#221F1B]">{clasesPorAlumno[a.id] ?? 0}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`text-xs px-2 py-1 rounded-full ${a.estado === 'activo' ? 'bg-[#5C6F5D] text-white' : 'bg-[#EDE7DD] text-[#8A8378]'}`}>
-                      {a.estado === 'activo' ? 'Activo' : 'Baja'}
+                    <span className={`text-xs px-2 py-1 rounded-full ${idsActivosHoy.has(a.id) ? 'bg-[#5C6F5D] text-white' : 'bg-[#EDE7DD] text-[#8A8378]'}`}>
+                      {idsActivosHoy.has(a.id) ? 'Activo' : 'Baja'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
@@ -279,7 +292,7 @@ export default function Alumnos() {
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-medium text-[#221F1B] mb-1">{viendo.nombre}</p>
             <p className="text-xs text-[#8A8378] mb-4">
-              {clasesPorAlumno[viendo.id] ?? 0} clases/semana en {labelMesStats} · {viendo.estado === 'activo' ? 'Activo' : 'Baja'}
+              {clasesPorAlumno[viendo.id] ?? 0} clases/semana en {labelMesStats} · {idsActivosHoy.has(viendo.id) ? 'Activo hoy' : 'Baja hoy'}
               {viendo.exento_pago ? ' · Exento de pago' : ''}
             </p>
             <p className="text-xs font-medium text-[#8A8378] uppercase tracking-wide mb-2">Horarios en {labelMesStats}</p>
@@ -306,16 +319,8 @@ export default function Alumnos() {
             <label className="block text-xs text-[#8A8378] mb-1">Nombre</label>
             <input value={editando.nombre} onChange={e => setEditando({ ...editando, nombre: e.target.value })} className="w-full border border-[#221F1B]/15 rounded-lg px-3 py-2 text-sm mb-3 outline-none focus:border-[#5C6F5D]" />
             <p className="text-xs text-[#8A8378] mb-4">
-              Clases por semana: <span className="text-[#221F1B] font-medium">{clasesPorAlumno[editando.id] ?? 0}</span> (se calcula solo desde la grilla, no se edita acá)
+              Estado: <span className="text-[#221F1B] font-medium">{idsActivosHoy.has(editando.id) ? 'Activo' : 'Baja'}</span> (se calcula solo desde la grilla de este mes — dalo de baja desde Días y Horarios o Cobranza, no acá)
             </p>
-            <label className="block text-xs text-[#8A8378] mb-1">Estado</label>
-            <div className="flex gap-2 mb-4">
-              {['activo', 'baja'].map(e => (
-                <button key={e} onClick={() => setEditando({ ...editando, estado: e })} className={`px-4 py-1.5 rounded-full text-sm border ${editando.estado === e ? 'bg-[#5C6F5D] text-white border-[#5C6F5D]' : 'bg-white text-[#221F1B] border-[#221F1B]/15'}`}>
-                  {e === 'activo' ? 'Activo' : 'Baja'}
-                </button>
-              ))}
-            </div>
 
             <div className="flex items-center justify-between bg-[#F5F1E9] rounded-lg px-3 py-2.5 mb-5">
               <div>
