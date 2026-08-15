@@ -67,6 +67,7 @@ export default function Grilla() {
   const [telefonoEsperaForm, setTelefonoEsperaForm] = useState('')
   const [verEsperaModal, setVerEsperaModal] = useState(null)
   const [esperaIdPendiente, setEsperaIdPendiente] = useState(null)
+  const [creandoHorario, setCreandoHorario] = useState(false)
   const canvasRef = useRef(null)
 
   useEffect(() => {
@@ -138,6 +139,20 @@ export default function Grilla() {
   function getSlot(dia, hora) { return horarios.find(h => h.dia === dia && h.hora === hora) }
   function inscriptosDe(slotId) { return inscripciones.filter(i => i.horario_clase_id === slotId) }
   function esperaDe(slotId) { return listaEspera.filter(e => e.horario_clase_id === slotId) }
+
+  async function abrirHorarioNuevo(dia, hora) {
+    if (creandoHorario) return
+    setCreandoHorario(true)
+    const { data: nuevo, error } = await supabase
+      .from('horarios_clase')
+      .insert({ dia, hora, cupos: 6, activo: true })
+      .select()
+      .single()
+    setCreandoHorario(false)
+    if (error) { alert('No se pudo crear el horario: ' + error.message); return }
+    setHorarios(prev => [...prev, nuevo])
+    setModal({ slotId: nuevo.id })
+  }
 
   async function asignar(slotId, alumnoId) {
     await supabase.from('inscripciones').insert({ alumno_id: alumnoId, horario_clase_id: slotId, mes, estado: 'activo' })
@@ -369,7 +384,7 @@ export default function Grilla() {
     router.push('/login')
   }
 
-  const horariosDelDiaMovil = horasUnicas.filter(hora => getSlot(diaMovil, hora))
+  const horariosDelDiaMovil = horasUnicas
 
   if (!rol) return null
 
@@ -444,13 +459,13 @@ export default function Grilla() {
                     </td>
                     {DIAS.map(dia => {
                       const slot = getSlot(dia, hora)
-                      if (!slot) return <td key={dia} className="px-3 py-2" />
-                      const inscriptos = inscriptosDe(slot.id)
-                      const libres = slot.cupos - inscriptos.length
-                      const espera = esperaDe(slot.id)
-                      const cerrado = inscriptos.length === 0
+                      const inscriptos = slot ? inscriptosDe(slot.id) : []
+                      const libres = slot ? slot.cupos - inscriptos.length : 0
+                      const espera = slot ? esperaDe(slot.id) : []
+                      const cerrado = !slot || inscriptos.length === 0
 
                       if (esProfe) {
+                        if (!slot) return <td key={dia} className="px-3 py-2" />
                         return (
                           <td key={dia} className="px-3 py-2 align-middle">
                             <div className="flex flex-col gap-1.5 items-center">
@@ -472,11 +487,11 @@ export default function Grilla() {
                           <td
                             key={dia}
                             className="px-3 py-2 align-middle"
-                            onDragOver={e => e.preventDefault()}
-                            onDrop={e => onDrop(e, slot, dia, hora)}
+                            onDragOver={e => { if (slot) e.preventDefault() }}
+                            onDrop={e => { if (slot) onDrop(e, slot, dia, hora) }}
                           >
                             <button
-                              onClick={() => setModal({ slotId: slot.id })}
+                              onClick={() => slot ? setModal({ slotId: slot.id }) : abrirHorarioNuevo(dia, hora)}
                               className="w-full text-center text-[10px] text-[#221F1B]/15 hover:text-[#5C6F5D] transition-colors py-1"
                             >
                               Abrir horario
@@ -562,18 +577,20 @@ export default function Grilla() {
             <div className="flex flex-col gap-3">
               {horariosDelDiaMovil.map(hora => {
                 const slot = getSlot(diaMovil, hora)
-                if (!slot) return null
-                const inscriptos = inscriptosDe(slot.id)
-                const libres = slot.cupos - inscriptos.length
-                const espera = esperaDe(slot.id)
-                const cerrado = inscriptos.length === 0
+                const inscriptos = slot ? inscriptosDe(slot.id) : []
+                const libres = slot ? slot.cupos - inscriptos.length : 0
+                const espera = slot ? esperaDe(slot.id) : []
+                const cerrado = !slot || inscriptos.length === 0
 
                 if (cerrado) {
                   if (esProfe) return null
                   return (
                     <div key={hora} className="flex items-center justify-between px-1">
                       <p className="font-mono text-sm text-[#221F1B]/20">{formatHoraCompleta(hora)}</p>
-                      <button onClick={() => setModal({ slotId: slot.id })} className="text-[10px] text-[#221F1B]/15 hover:text-[#5C6F5D] transition-colors">
+                      <button
+                        onClick={() => slot ? setModal({ slotId: slot.id }) : abrirHorarioNuevo(diaMovil, hora)}
+                        className="text-[10px] text-[#221F1B]/15 hover:text-[#5C6F5D] transition-colors"
+                      >
                         Abrir horario
                       </button>
                     </div>
