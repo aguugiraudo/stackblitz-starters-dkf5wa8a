@@ -55,6 +55,7 @@ export default function Grilla() {
   const [confirmarMover, setConfirmarMover] = useState(null)
   const [dispAbierta, setDispAbierta] = useState(false)
   const [placaAbierta, setPlacaAbierta] = useState(false)
+  const [abrirHorarioModal, setAbrirHorarioModal] = useState(false)
   const [camasConsulta, setCamasConsulta] = useState(1)
   const [textoCopiado, setTextoCopiado] = useState(false)
   const [diaMovil, setDiaMovil] = useState(DIAS[0])
@@ -139,6 +140,10 @@ export default function Grilla() {
   function inscriptosDe(slotId) { return inscripciones.filter(i => i.horario_clase_id === slotId) }
   function esperaDe(slotId) { return listaEspera.filter(e => e.horario_clase_id === slotId) }
 
+  const horariosCerrados = horarios
+    .filter(h => inscriptosDe(h.id).length === 0)
+    .sort((a, b) => a.hora.localeCompare(b.hora))
+
   async function asignar(slotId, alumnoId) {
     await supabase.from('inscripciones').insert({ alumno_id: alumnoId, horario_clase_id: slotId, mes, estado: 'activo' })
     await sincronizarEstadoAlumno(alumnoId)
@@ -220,6 +225,11 @@ export default function Grilla() {
     setEsperaIdPendiente(entry.id)
     setBusqueda(entry.alumno_nombre)
     setModal({ slotId: entry.horario_clase_id })
+  }
+
+  function abrirDesdeListado(slotId) {
+    setAbrirHorarioModal(false)
+    setModal({ slotId })
   }
 
   const alumnosFiltrados = alumnosList.filter(a => a.nombre.toLowerCase().includes(busqueda.toLowerCase()))
@@ -402,6 +412,9 @@ export default function Grilla() {
         </div>
         {!esProfe && (
           <div className="flex gap-2 flex-wrap">
+            <button onClick={() => setAbrirHorarioModal(true)} className="text-sm px-4 py-2 rounded-full bg-white border border-[#221F1B]/10 text-[#221F1B] hover:border-[#5C6F5D] hover:text-[#5C6F5D] flex items-center gap-2">
+              <span>🔓</span> Abrir horario
+            </button>
             <button onClick={() => setDispAbierta(true)} className="text-sm px-4 py-2 rounded-full bg-white border border-[#221F1B]/10 text-[#221F1B] hover:border-[#5C6F5D] hover:text-[#5C6F5D] flex items-center gap-2">
               <span>🕧</span> Disponibilidad
             </button>
@@ -448,6 +461,7 @@ export default function Grilla() {
                       const inscriptos = inscriptosDe(slot.id)
                       const libres = slot.cupos - inscriptos.length
                       const espera = esperaDe(slot.id)
+                      const cerrado = inscriptos.length === 0
 
                       if (esProfe) {
                         return (
@@ -458,11 +472,22 @@ export default function Grilla() {
                                   {i.alumnos?.nombre}
                                 </span>
                               ))}
-                              {libres > 0 && (
+                              {!cerrado && libres > 0 && (
                                 <span className="text-[11px] text-[#B7B9B1]">{libres} libre{libres > 1 ? 's' : ''}</span>
                               )}
                             </div>
                           </td>
+                        )
+                      }
+
+                      if (cerrado) {
+                        return (
+                          <td
+                            key={dia}
+                            className="px-3 py-2"
+                            onDragOver={e => e.preventDefault()}
+                            onDrop={e => onDrop(e, slot, dia, hora)}
+                          />
                         )
                       }
 
@@ -547,6 +572,8 @@ export default function Grilla() {
                 const inscriptos = inscriptosDe(slot.id)
                 const libres = slot.cupos - inscriptos.length
                 const espera = esperaDe(slot.id)
+                const cerrado = inscriptos.length === 0
+                if (cerrado) return null
                 return (
                   <div key={hora} className="bg-[#FBF9F5] rounded-xl border border-[#221F1B]/8 p-3">
                     <div className="flex items-center justify-between mb-2">
@@ -749,6 +776,33 @@ export default function Grilla() {
             </div>
             <div className="flex justify-end">
               <button onClick={() => setVerEsperaModal(null)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {abrirHorarioModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center px-4" onClick={() => setAbrirHorarioModal(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-[#221F1B] mb-1">Abrir horario — {labelMes}</p>
+            <p className="text-xs text-[#8A8378] mb-4">Elegí un horario cerrado para anotar al primer alumno</p>
+            <div className="max-h-64 overflow-y-auto flex flex-col gap-1">
+              {horariosCerrados.map(h => (
+                <button
+                  key={h.id}
+                  onClick={() => abrirDesdeListado(h.id)}
+                  className="text-left text-sm px-3 py-2 rounded-lg hover:bg-[#F5F1E9] text-[#221F1B] flex justify-between items-center"
+                >
+                  <span>{h.dia} — {formatHoraCompleta(h.hora)}</span>
+                  <span className="text-xs text-[#8A8378]">{h.cupos} cupos</span>
+                </button>
+              ))}
+              {horariosCerrados.length === 0 && (
+                <p className="text-xs text-[#8A8378] px-3 py-2">No hay horarios cerrados este mes</p>
+              )}
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setAbrirHorarioModal(false)} className="px-4 py-2 rounded-full text-sm font-medium text-[#221F1B] border border-[#221F1B]/15 hover:bg-[#F5F1E9]">Cerrar</button>
             </div>
           </div>
         </div>
