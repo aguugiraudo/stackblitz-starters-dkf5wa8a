@@ -102,7 +102,29 @@ export default function Grilla() {
 
   useEffect(() => {
     const img = new Image()
-    img.onload = () => setLogoImg(img)
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const off = document.createElement('canvas')
+      off.width = img.width
+      off.height = img.height
+      const octx = off.getContext('2d')
+      octx.drawImage(img, 0, 0)
+      try {
+        const data = octx.getImageData(0, 0, off.width, off.height)
+        const px = data.data
+        const bgR = px[0], bgG = px[1], bgB = px[2]
+        const tolerance = 42
+        for (let i = 0; i < px.length; i += 4) {
+          const dr = px[i] - bgR, dg = px[i + 1] - bgG, db = px[i + 2] - bgB
+          const dist = Math.sqrt(dr * dr + dg * dg + db * db)
+          if (dist < tolerance) px[i + 3] = 0
+        }
+        octx.putImageData(data, 0, 0)
+      } catch (e) {
+        // si el canvas queda "tainted" por CORS, seguimos con el logo tal cual
+      }
+      setLogoImg(off)
+    }
     img.src = '/logo.png'
   }, [])
 
@@ -298,32 +320,34 @@ export default function Grilla() {
       const scale = Math.max(W / fondoImg.width, H / fondoImg.height)
       const w = fondoImg.width * scale, h = fondoImg.height * scale
       ctx.drawImage(fondoImg, (W - w) / 2, (H - h) / 2, w, h)
-      ctx.fillStyle = 'rgba(0,0,0,0.12)'
+      ctx.fillStyle = 'rgba(0,0,0,0.08)'
       ctx.fillRect(0, 0, W, H)
     } else {
       ctx.fillStyle = '#3B4552'
       ctx.fillRect(0, 0, W, H)
     }
 
-    const cardX = 90, cardY = 320, cardW = W - 180
-    let cardH = 620
+    // ---- Tarjeta crema (más chica, deja ver mucho más fondo alrededor) ----
+    const cardX = 160, cardY = 390, cardW = W - 320
+    let cardH = 480
     const filasDias = bloquesPlaca.length > 0 ? bloquesPlaca.length : 1
-    cardH += filasDias * 150
+    cardH += filasDias * 128
 
     ctx.save()
     ctx.shadowColor = 'rgba(0,0,0,0.25)'
-    ctx.shadowBlur = 30
+    ctx.shadowBlur = 26
     ctx.fillStyle = '#F3ECDE'
-    roundRect(ctx, cardX, cardY, cardW, cardH, 6)
+    roundRect(ctx, cardX, cardY, cardW, cardH, 4)
     ctx.fill()
     ctx.restore()
 
-    const badgeR = 130
+    // ---- Badge circular con el logo sin fondo, flotando ----
+    const badgeR = 112
     const badgeCx = W / 2, badgeCy = cardY
     ctx.save()
     ctx.beginPath()
     ctx.arc(badgeCx, badgeCy, badgeR, 0, Math.PI * 2)
-    ctx.fillStyle = '#D9CFC0'
+    ctx.fillStyle = '#C9C2B3'
     ctx.fill()
     ctx.clip()
     if (logoImg) {
@@ -333,33 +357,37 @@ export default function Grilla() {
     }
     ctx.restore()
 
+    // ---- Título ----
     ctx.textAlign = 'center'
     ctx.fillStyle = '#3A2418'
-    ctx.font = '700 50px sans-serif'
-    ctx.fillText('ÚLTIMOS CUPOS', W / 2, cardY + badgeR + 100)
-    ctx.fillText('DISPONIBLES', W / 2, cardY + badgeR + 160)
+    ctx.font = '700 44px sans-serif'
+    ctx.fillText('ÚLTIMOS CUPOS', W / 2, cardY + badgeR + 88)
+    ctx.fillText('DISPONIBLES', W / 2, cardY + badgeR + 142)
 
-    let y = cardY + badgeR + 260
+    // ---- Días ----
+    let y = cardY + badgeR + 230
     if (bloquesPlaca.length === 0) {
-      ctx.font = '500 36px sans-serif'
+      ctx.font = '500 32px sans-serif'
       ctx.fillText('Sin cupos disponibles', W / 2, y)
-      y += 90
+      y += 80
     } else {
       bloquesPlaca.forEach(b => {
-        ctx.font = '700 42px sans-serif'
+        ctx.font = '700 38px sans-serif'
         ctx.fillText(b.dia.toUpperCase(), W / 2, y)
-        y += 54
-        ctx.font = '500 36px sans-serif'
+        y += 48
+        ctx.font = '500 32px sans-serif'
         ctx.fillText(b.horasLibres.join(' - '), W / 2, y)
-        y += 96
+        y += 80
       })
     }
 
+    // ---- Pie: dirección y teléfono, AFUERA de la tarjeta, sobre la foto ----
+    const footerY = H - 140
     ctx.font = '700 34px sans-serif'
-    ctx.fillStyle = '#3A2418'
-    ctx.fillText(direccionForm.toUpperCase(), W / 2, cardY + cardH - 90)
-    ctx.font = '600 32px sans-serif'
-    ctx.fillText(telefonoForm, W / 2, cardY + cardH - 42)
+    ctx.fillStyle = fondoImg ? '#FFFFFF' : '#F3ECDE'
+    ctx.fillText(direccionForm.toUpperCase(), W / 2, footerY)
+    ctx.font = '600 30px sans-serif'
+    ctx.fillText(telefonoForm, W / 2, footerY + 48)
   }, [placaAbierta, bloquesPlaca, labelMes, fondoImg, logoImg, direccionForm, telefonoForm])
 
   function onFondoChange(e) {
