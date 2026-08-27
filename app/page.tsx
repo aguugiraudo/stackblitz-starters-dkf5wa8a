@@ -246,7 +246,9 @@ export default function Grilla() {
       .filter(hora => {
         const slot = getSlot(dia, hora)
         if (!slot) return false
-        const libres = slot.cupos - inscriptosDe(slot.id).length
+        const inscriptos = inscriptosDe(slot.id)
+        if (inscriptos.length === 0) return false
+        const libres = slot.cupos - inscriptos.length
         return libres >= camasConsulta
       })
       .map(formatHoraCompleta)
@@ -276,7 +278,9 @@ export default function Grilla() {
       .filter(hora => {
         const slot = getSlot(dia, hora)
         if (!slot) return false
-        return slot.cupos - inscriptosDe(slot.id).length >= 1
+        const inscriptos = inscriptosDe(slot.id)
+        if (inscriptos.length === 0) return false
+        return slot.cupos - inscriptos.length >= 1
       })
       .map(formatHoraCompleta)
     return { dia, horasLibres }
@@ -492,10 +496,9 @@ export default function Grilla() {
                           >
                             <button
                               onClick={() => slot ? setModal({ slotId: slot.id }) : abrirHorarioNuevo(dia, hora)}
-                              className="w-full text-center text-[10px] text-[#221F1B]/15 hover:text-[#5C6F5D] transition-colors py-1"
-                            >
-                              Abrir horario
-                            </button>
+                              aria-label="Abrir horario"
+                              className="w-full h-9 block"
+                            />
                           </td>
                         )
                       }
@@ -585,15 +588,13 @@ export default function Grilla() {
                 if (cerrado) {
                   if (esProfe) return null
                   return (
-                    <div key={hora} className="flex items-center justify-between px-1">
-                      <p className="font-mono text-sm text-[#221F1B]/20">{formatHoraCompleta(hora)}</p>
-                      <button
-                        onClick={() => slot ? setModal({ slotId: slot.id }) : abrirHorarioNuevo(diaMovil, hora)}
-                        className="text-[10px] text-[#221F1B]/15 hover:text-[#5C6F5D] transition-colors"
-                      >
-                        Abrir horario
-                      </button>
-                    </div>
+                    <button
+                      key={hora}
+                      onClick={() => slot ? setModal({ slotId: slot.id }) : abrirHorarioNuevo(diaMovil, hora)}
+                      className="w-full flex items-center px-1 py-2 text-left"
+                    >
+                      <span className="font-mono text-sm text-[#221F1B]/20">{formatHoraCompleta(hora)}</span>
+                    </button>
                   )
                 }
 
@@ -632,11 +633,6 @@ export default function Grilla() {
                       ))}
                       {esProfe && libres > 0 && (
                         <span className="text-[11px] text-[#B7B9B1]">{libres} libre{libres > 1 ? 's' : ''}</span>
-                      )}
-                      {!esProfe && libres <= 0 && (
-                        <button onClick={() => setEsperaModal({ slotId: slot.id })} className="rounded-full border border-dashed border-[#8A6B2C] text-[#8A6B2C] text-xs px-3 py-1">
-                          + Lista de espera
-                        </button>
                       )}
                     </div>
                   </div>
