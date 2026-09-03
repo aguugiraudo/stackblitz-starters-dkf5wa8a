@@ -7,6 +7,11 @@ import { getRol, cerrarSesion, ROLES } from './lib/auth'
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
 const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
+function mesActualISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
 function mesAnterior(mes) {
   const [y, m] = mes.split('-').map(Number)
   const fecha = new Date(y, m - 2, 1)
@@ -46,7 +51,7 @@ export default function Grilla() {
   const [inscripciones, setInscripciones] = useState([])
   const [alumnosList, setAlumnosList] = useState([])
   const [listaEspera, setListaEspera] = useState([])
-  const [mes, setMes] = useState('2026-08-01')
+  const [mes, setMes] = useState(mesActualISO())
   const [cargando, setCargando] = useState(true)
   const [modal, setModal] = useState(null)
   const [busqueda, setBusqueda] = useState('')
@@ -120,9 +125,7 @@ export default function Grilla() {
           if (dist < tolerance) px[i + 3] = 0
         }
         octx.putImageData(data, 0, 0)
-      } catch (e) {
-        // si el canvas queda "tainted" por CORS, seguimos con el logo tal cual
-      }
+      } catch (e) {}
       setLogoImg(off)
     }
     img.src = '/logo.png'
@@ -327,7 +330,6 @@ export default function Grilla() {
       ctx.fillRect(0, 0, W, H)
     }
 
-    // ---- Tarjeta crema (más chica, deja ver mucho más fondo alrededor) ----
     const cardX = 160, cardY = 390, cardW = W - 320
     let cardH = 480
     const filasDias = bloquesPlaca.length > 0 ? bloquesPlaca.length : 1
@@ -341,7 +343,6 @@ export default function Grilla() {
     ctx.fill()
     ctx.restore()
 
-    // ---- Badge circular con el logo sin fondo, flotando ----
     const badgeR = 112
     const badgeCx = W / 2, badgeCy = cardY
     ctx.save()
@@ -357,14 +358,12 @@ export default function Grilla() {
     }
     ctx.restore()
 
-    // ---- Título ----
     ctx.textAlign = 'center'
     ctx.fillStyle = '#3A2418'
     ctx.font = '700 44px sans-serif'
     ctx.fillText('ÚLTIMOS CUPOS', W / 2, cardY + badgeR + 88)
     ctx.fillText('DISPONIBLES', W / 2, cardY + badgeR + 142)
 
-    // ---- Días ----
     let y = cardY + badgeR + 230
     if (bloquesPlaca.length === 0) {
       ctx.font = '500 32px sans-serif'
@@ -381,7 +380,6 @@ export default function Grilla() {
       })
     }
 
-    // ---- Pie: dirección y teléfono, AFUERA de la tarjeta, sobre la foto ----
     const footerY = H - 140
     ctx.font = '700 34px sans-serif'
     ctx.fillStyle = fondoImg ? '#FFFFFF' : '#F3ECDE'

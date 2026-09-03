@@ -6,6 +6,11 @@ import { getRol, cerrarSesion, ROLES } from '../lib/auth'
 
 const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
+function mesActualISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
 function hoyISO() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -26,7 +31,7 @@ async function sincronizarEstadoAlumno(alumnoId) {
 export default function Cobranza() {
   const router = useRouter()
   const [rol, setRolState] = useState(null)
-  const [mes, setMes] = useState('2026-08-01')
+  const [mes, setMes] = useState(mesActualISO())
   const [cargando, setCargando] = useState(true)
   const [alumnosDelMes, setAlumnosDelMes] = useState([])
   const [cobranzas, setCobranzas] = useState([])

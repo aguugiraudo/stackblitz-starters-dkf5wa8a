@@ -39,7 +39,7 @@ export default function Alumnos() {
   const [conteos, setConteos] = useState(null)
   const [survivor, setSurvivor] = useState(null)
   const [sospechososVigentes, setSospechososVigentes] = useState([])
-  const [mesStats, setMesStats] = useState('2026-08-01')
+  const [mesStats, setMesStats] = useState(mesActualISO())
   const [anotadosEnMes, setAnotadosEnMes] = useState(null)
   const [clasesPorAlumno, setClasesPorAlumno] = useState({})
 

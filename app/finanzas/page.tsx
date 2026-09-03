@@ -7,10 +7,15 @@ import { getRol, cerrarSesion, ROLES } from '../lib/auth'
 const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const DENOMINACIONES = [20000, 10000, 2000, 1000, 500, 100]
 
+function mesActualISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
 export default function Finanzas() {
   const router = useRouter()
   const [rol, setRolState] = useState(null)
-  const [mes, setMes] = useState('2026-08-01')
+  const [mes, setMes] = useState(mesActualISO())
   const [cargando, setCargando] = useState(true)
   const [ingresoProyectado, setIngresoProyectado] = useState(0)
   const [ingresoReal, setIngresoReal] = useState(0)

@@ -6,6 +6,11 @@ import { getRol, cerrarSesion, ROLES } from '../lib/auth'
 
 const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
+function mesActualISO() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
 function mesAnterior(mes) {
   const [y, m] = mes.split('-').map(Number)
   const fecha = new Date(y, m - 2, 1)
@@ -20,7 +25,7 @@ function hoyISO() {
 export default function Dashboard() {
   const router = useRouter()
   const [rol, setRolState] = useState(null)
-  const [mes, setMes] = useState('2026-08-01')
+  const [mes, setMes] = useState(mesActualISO())
   const [cargando, setCargando] = useState(true)
   const [alumnosActivos, setAlumnosActivos] = useState(0)
   const [alumnosNuevos, setAlumnosNuevos] = useState(0)
